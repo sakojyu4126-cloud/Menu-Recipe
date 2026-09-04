@@ -1,0 +1,6 @@
+{
+  "name": "桃の郷 京都東山 献立表",
+  "description": "サービス付き高齢者向け住宅（70〜90代）の厨房向け栄養管理・食品構成マトリックス献立表。1日食塩6.5g以下管理、人数連動の食材量自動計算、日別登録・保存管理、印刷・PDF保存に対応。",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
