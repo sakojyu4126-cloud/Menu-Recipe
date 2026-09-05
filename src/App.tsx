@@ -516,23 +516,6 @@ export default function App() {
                     dayIndex > 0 ? 'border-t-4 border-t-[#2e4c43]' : ''
                   }`}
                 >
-                  {/* Day Indicator Badge if multiple days */}
-                  {sheetDays.length > 1 && (
-                    <div className="flex items-center justify-between mb-1.5 pb-1 border-b border-stone-200 text-xs font-bold text-stone-700">
-                      <span className="flex items-center gap-1.5">
-                        <span className="w-5 h-5 rounded-full bg-[#2e4c43] text-white text-[11px] flex items-center justify-center font-extrabold">
-                          {dayIndex + 1}
-                        </span>
-                        <span>
-                          第{dayIndex + 1}日目：{dayItem.dateInfo.month}月{dayItem.dateInfo.day}日（{dayItem.dateInfo.dayOfWeek}）
-                        </span>
-                      </span>
-                      <span className="text-[11px] text-stone-500 font-normal">
-                        朝・昼・夕の献立詳細と食品構成
-                      </span>
-                    </div>
-                  )}
-
                   {/* Daily Nutrition Summary Header (Date input + 6.5g Salt Target) */}
                   <DailyNutritionSummary
                     day={dayItem}
