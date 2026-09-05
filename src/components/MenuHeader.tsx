@@ -1,5 +1,5 @@
 import React from 'react';
-import { Users, Printer, FileText, ListOrdered } from 'lucide-react';
+import { Users, Printer, FileText, ListOrdered, Save, RotateCcw } from 'lucide-react';
 import { FacilityInfo } from '../types';
 
 interface Props {
@@ -9,6 +9,8 @@ interface Props {
   onChangeTab: (tab: 'edit' | 'list') => void;
   savedCount: number;
   onOpenPrintModal: () => void;
+  onOpenSaveData: () => void;
+  onOpenRestoreData: () => void;
 }
 
 export const MenuHeader: React.FC<Props> = ({
@@ -17,7 +19,9 @@ export const MenuHeader: React.FC<Props> = ({
   activeTab,
   onChangeTab,
   savedCount,
-  onOpenPrintModal
+  onOpenPrintModal,
+  onOpenSaveData,
+  onOpenRestoreData
 }) => {
   return (
     <header className="bg-white border-b border-stone-300 shadow-2xs print:hidden">
@@ -92,6 +96,28 @@ export const MenuHeader: React.FC<Props> = ({
                 <span className="ml-1.5 text-stone-900 font-bold text-xs sm:text-sm">名</span>
               </div>
             </div>
+
+            {/* データ保存 (Backup Export) */}
+            <button
+              type="button"
+              onClick={onOpenSaveData}
+              className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-lg border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-900 shadow-2xs transition-colors cursor-pointer"
+              title="編集中の献立・登録一覧・施設設定をまとめてPCファイルおよびブラウザにバックアップ保存します"
+            >
+              <Save className="w-3.5 h-3.5 text-emerald-700" />
+              <span>データ保存</span>
+            </button>
+
+            {/* データ復元 (Backup Restore) */}
+            <button
+              type="button"
+              onClick={onOpenRestoreData}
+              className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-lg border border-blue-300 bg-blue-50 hover:bg-blue-100 text-blue-900 shadow-2xs transition-colors cursor-pointer"
+              title="保存したバックアップファイル（.json）や直近バックアップから献立データを復元します"
+            >
+              <RotateCcw className="w-3.5 h-3.5 text-blue-700" />
+              <span>データ復元</span>
+            </button>
 
             {/* Print & PDF Button */}
             <button

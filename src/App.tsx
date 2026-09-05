@@ -6,9 +6,11 @@ import { SavedMenuList } from './components/SavedMenuList';
 import { PrintModal } from './components/PrintModal';
 import { SavedListPrintModal } from './components/SavedListPrintModal';
 import { DishEditModal } from './components/DishEditModal';
+import { DataBackupModal } from './components/DataBackupModal';
 import { initialDays } from './data/initialMenu';
 import { DayMenu, FacilityInfo, MealData, DishItem, SavedMenuRecord, DayMenuDateInfo } from './types';
 import { createBlankDayMenu, calculateDayTotals, getDayOfWeek } from './utils/nutrition';
+import { AppBackupData } from './utils/dataBackup';
 import { RotateCcw, Save, CheckCircle2, Layers } from 'lucide-react';
 
 const STORAGE_KEY_SAVED_RECORDS = 'momonosato_saved_records_v3';
@@ -95,6 +97,14 @@ export default function App() {
   const [isPrintModalOpen, setIsPrintModalOpen] = useState<boolean>(false);
   const [isSavedListPrintModalOpen, setIsSavedListPrintModalOpen] = useState<boolean>(false);
   const [saveToast, setSaveToast] = useState<string | null>(null);
+
+  const [backupModal, setBackupModal] = useState<{
+    isOpen: boolean;
+    defaultTab: 'save' | 'restore';
+  }>({
+    isOpen: false,
+    defaultTab: 'save'
+  });
 
   const [dishEditModal, setDishEditModal] = useState<{
     isOpen: boolean;
@@ -405,6 +415,22 @@ export default function App() {
     setIsPrintModalOpen(true);
   };
 
+  // Restore entire application state from backup
+  const handleRestoreData = (backup: AppBackupData) => {
+    if (backup.facilityInfo) {
+      setFacilityInfo(backup.facilityInfo);
+    }
+    if (backup.sheetMode) {
+      setSheetMode(backup.sheetMode);
+    }
+    if (Array.isArray(backup.sheetDays) && backup.sheetDays.length > 0) {
+      setSheetDays(backup.sheetDays);
+    }
+    if (Array.isArray(backup.savedRecords)) {
+      setSavedRecords(backup.savedRecords);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-stone-100/70 text-stone-800 font-sans pb-16 print:bg-white print:pb-0">
       {/* Top Header */}
@@ -421,6 +447,8 @@ export default function App() {
             setIsPrintModalOpen(true);
           }
         }}
+        onOpenSaveData={() => setBackupModal({ isOpen: true, defaultTab: 'save' })}
+        onOpenRestoreData={() => setBackupModal({ isOpen: true, defaultTab: 'restore' })}
       />
 
       {/* Main Content */}
@@ -621,6 +649,22 @@ export default function App() {
         }
         facilityInfo={facilityInfo}
         onSave={handleSaveModalDish}
+      />
+
+      {/* Data Backup & Restore Modal */}
+      <DataBackupModal
+        isOpen={backupModal.isOpen}
+        onClose={() => setBackupModal((prev) => ({ ...prev, isOpen: false }))}
+        facilityInfo={facilityInfo}
+        sheetMode={sheetMode}
+        sheetDays={sheetDays}
+        savedRecords={savedRecords}
+        onRestoreData={handleRestoreData}
+        onNotifyToast={(msg) => {
+          setSaveToast(msg);
+          setTimeout(() => setSaveToast(null), 4500);
+        }}
+        defaultActionTab={backupModal.defaultTab}
       />
     </div>
   );
