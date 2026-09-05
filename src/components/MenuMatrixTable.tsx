@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Sparkles, Trash2, Edit3, Check, X, ArrowUp, ArrowDown } from 'lucide-react';
 import { MealData, DishItem, FacilityInfo } from '../types';
 import { calculateMealTotals } from '../utils/nutrition';
-import { calculateDishNutrition } from '../utils/dishNutritionEngine';
+import { calculateDishNutrition, inferDishRole } from '../utils/dishNutritionEngine';
 
 interface Props {
   meal: MealData;
@@ -39,16 +39,17 @@ export const MenuMatrixTable: React.FC<Props> = ({
   const handleSaveEdit = (id: string) => {
     const targetItem = meal.items.find(i => i.id === id);
     const newName = (editForm.dishName ?? targetItem?.dishName ?? '').trim();
+    const targetRole = inferDishRole(newName, editForm.role || targetItem?.role);
     const currentIng = editForm.ingredients ?? targetItem?.ingredients ?? '';
     const currentCal = Number(editForm.calories) || Number(targetItem?.calories) || 0;
 
-    // もし料理名が入力されていて、食材やカロリーが未入力(0)の場合は自動で栄養価と調味料を算定
+    // もし料理名が入力されていて、食材やカロリーが未入力(0)または料理名が変更された場合は自動で栄養価と調味料を算定
     let autoCalcData: any = null;
-    if (newName && (!currentIng || currentIng === '未入力' || currentCal === 0)) {
+    if (newName && (newName !== targetItem?.dishName || !currentIng || currentIng === '未入力' || currentCal === 0)) {
       autoCalcData = calculateDishNutrition(
         newName,
         meal.name,
-        editForm.role || targetItem?.role || '主菜',
+        targetRole,
         facilityInfo.residentCount
       );
     }
@@ -58,6 +59,7 @@ export const MenuMatrixTable: React.FC<Props> = ({
         return {
           ...item,
           ...editForm,
+          role: autoCalcData?.dishType || editForm.role || targetRole,
           dishName: newName,
           ingredients: autoCalcData ? autoCalcData.ingredients : (editForm.ingredients ?? item.ingredients),
           amounts: autoCalcData ? autoCalcData.amounts : (editForm.amounts ?? item.amounts),
@@ -82,6 +84,7 @@ export const MenuMatrixTable: React.FC<Props> = ({
     const targetName = (editingId === dish.id && editForm.dishName ? editForm.dishName : dish.dishName).trim();
     if (!targetName) return;
 
+    const targetRole = inferDishRole(targetName, editForm.role || dish.role);
     setLoadingAiId(dish.id);
     try {
       let data: any = null;
@@ -94,7 +97,7 @@ export const MenuMatrixTable: React.FC<Props> = ({
           body: JSON.stringify({
             dishName: targetName,
             mealCategory: meal.name,
-            dishType: editForm.role || dish.role,
+            dishType: targetRole,
             currentResidentCount: facilityInfo.residentCount
           })
         });
@@ -108,12 +111,12 @@ export const MenuMatrixTable: React.FC<Props> = ({
         console.warn('API route call not available, falling back to autonomous nutrition engine:', networkErr);
       }
 
-      // APIが無効・404・エラー時は、高齢者施設基準の自律計算エンジンで即座に高精度算定
+      // APIが無効・404・エラー時は、給食・栄養基準の自律計算エンジンで即座に高精度算定
       if (!data || !data.ingredients) {
         data = calculateDishNutrition(
           targetName,
           meal.name,
-          editForm.role || dish.role,
+          targetRole,
           facilityInfo.residentCount
         );
       }
@@ -121,7 +124,7 @@ export const MenuMatrixTable: React.FC<Props> = ({
       const updatedDish: DishItem = {
         ...dish,
         dishName: targetName,
-        role: editForm.role || dish.role,
+        role: data.dishType || targetRole,
         ingredients: data.ingredients,
         amounts: data.amounts,
         saltGrams: data.saltGrams,
@@ -145,12 +148,13 @@ export const MenuMatrixTable: React.FC<Props> = ({
       const safeData = calculateDishNutrition(
         targetName,
         meal.name,
-        editForm.role || dish.role,
+        targetRole,
         facilityInfo.residentCount
       );
       const fallbackDish: DishItem = {
         ...dish,
         dishName: targetName,
+        role: safeData.dishType || targetRole,
         ingredients: safeData.ingredients,
         amounts: safeData.amounts,
         saltGrams: safeData.saltGrams,

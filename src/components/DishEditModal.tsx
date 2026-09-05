@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Sparkles, Check, Flame, HeartPulse, Scale, ShieldAlert } from 'lucide-react';
 import { DishItem, FacilityInfo } from '../types';
-import { calculateDishNutrition } from '../utils/dishNutritionEngine';
+import { calculateDishNutrition, inferDishRole } from '../utils/dishNutritionEngine';
 
 interface Props {
   isOpen: boolean;
@@ -37,6 +37,7 @@ export const DishEditModal: React.FC<Props> = ({
     const targetName = (formData.dishName || '').trim();
     if (!targetName) return;
 
+    const targetRole = inferDishRole(targetName, formData.role || dish.role);
     setIsAiCalculating(true);
     try {
       let data: any = null;
@@ -48,7 +49,7 @@ export const DishEditModal: React.FC<Props> = ({
           body: JSON.stringify({
             dishName: targetName,
             mealCategory: mealName,
-            dishType: formData.role || '主菜',
+            dishType: targetRole,
             currentResidentCount: facilityInfo.residentCount
           })
         });
@@ -67,7 +68,7 @@ export const DishEditModal: React.FC<Props> = ({
         data = calculateDishNutrition(
           targetName,
           mealName,
-          formData.role || '主菜',
+          targetRole,
           facilityInfo.residentCount
         );
       }
@@ -75,6 +76,7 @@ export const DishEditModal: React.FC<Props> = ({
       setFormData(prev => ({
         ...prev,
         dishName: targetName,
+        role: data.dishType || targetRole,
         ingredients: data.ingredients,
         amounts: data.amounts,
         saltGrams: data.saltGrams,
@@ -90,12 +92,13 @@ export const DishEditModal: React.FC<Props> = ({
       const safeData = calculateDishNutrition(
         targetName,
         mealName,
-        formData.role || '主菜',
+        targetRole,
         facilityInfo.residentCount
       );
       setFormData(prev => ({
         ...prev,
         dishName: targetName,
+        role: safeData.dishType || targetRole,
         ingredients: safeData.ingredients,
         amounts: safeData.amounts,
         saltGrams: safeData.saltGrams,
@@ -118,17 +121,18 @@ export const DishEditModal: React.FC<Props> = ({
       return;
     }
 
+    const targetRole = inferDishRole(rawName, formData.role || dish.role);
     let currentIng = formData.ingredients || '';
     let currentCal = Number(formData.calories) || 0;
     let autoData: any = null;
 
-    if (!currentIng || currentIng === '未入力' || currentCal === 0) {
-      autoData = calculateDishNutrition(rawName, mealName, formData.role || dish.role, facilityInfo.residentCount);
+    if (!currentIng || currentIng === '未入力' || currentCal === 0 || rawName !== dish.dishName) {
+      autoData = calculateDishNutrition(rawName, mealName, targetRole, facilityInfo.residentCount);
     }
 
     const updated: DishItem = {
       ...dish,
-      role: formData.role || dish.role,
+      role: autoData?.dishType || formData.role || targetRole,
       dishName: rawName,
       ingredients: autoData ? autoData.ingredients : (formData.ingredients || ''),
       amounts: autoData ? autoData.amounts : (formData.amounts || ''),

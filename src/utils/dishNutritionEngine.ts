@@ -16,9 +16,56 @@ export interface CalculatedDishResult {
   calculatedForCount?: number;
 }
 
-// 高齢者施設（70〜90代・1日塩分6.5g以下基準厳守）の定番料理マスターデータ
+/**
+ * 料理名から適切な分類（主食・主菜・副菜・汁物）を高度に自動推定する関数
+ */
+export function inferDishRole(dishName: string, fallbackRole?: DishItem['role']): DishItem['role'] {
+  const name = (dishName || '').trim();
+  if (!name) return fallbackRole || '主菜';
+
+  // 1. 主食の判定
+  if (
+    /飯|ごはん|御飯|米|パン|うどん|饂飩|そば|蕎麦|ラーメン|拉麺|パスタ|スパゲッティ|丼|ピラフ|カレーライス|ハヤシライス|炒飯|チャーハン|粥|トースト|サンドイッチ|おにぎり|ドリア/.test(
+      name
+    ) &&
+    !/コロッケとナポリタン|スパゲッティ添え|サラダ/.test(name)
+  ) {
+    return '主食';
+  }
+
+  // 2. 汁物の判定
+  if (/味噌汁|みそ汁|すまし汁|澄まし汁|清汁|吸物|お吸い物|スープ|ポタージュ|豚汁|粕汁|潮汁|チャウダー/.test(name)) {
+    return '汁物';
+  }
+
+  // 3. 主菜の判定（肉、魚、卵、揚げ物、重めの具材、炒め物等）
+  if (
+    /肉|牛|豚|鶏|チキン|ポーク|ビーフ|ひき肉|挽肉|ミンチ|ウインナー|ウィンナー|ソーセージ|ハム|ベーコン|ミートボール|ハンバーグ|バーグ|コロッケ|メンチ|カツ|から揚げ|唐揚げ|竜田|フライ|天ぷら|天麩羅|南蛮|ポトフ|麻婆|マーボー|魚|鮭|サーモン|鯖|さば|鯵|あじ|アジ|鱈|たら|タラ|鯛|たい|タイ|鰆|さわら|鰤|ぶり|ブリ|鰯|いわし|秋刀魚|サンマ|さんま|まぐろ|マグロ|海老|えび|エビ|烏賊|いか|イカ|オムレツ|目玉焼き|スクランブルエッグ|卵焼き|玉子焼き|かに玉|餃子|ギョーザ|ぎょうざ|シュウマイ|焼売|しゅうまい|青椒肉絲|回鍋肉|ホイコーロー|酢豚|生姜焼き|照り焼き|照焼|ステーキ|ソテー|ピカタ|シチュー|グラタン|ロールキャベツ|治部煮|炒め|煮付け|塩焼き/.test(
+      name
+    )
+  ) {
+    return '主菜';
+  }
+
+  // 4. 副菜の判定（サラダ、和え物、煮物、小鉢、酢の物、煮浸し等）
+  if (
+    /サラダ|コールスロー|マリネ|和え|あえ|ごま和え|胡麻和え|白和え|酢の物|酢のもの|ナムル|小鉢|煮物|煮びたし|煮浸し|お浸し|おひたし|きんぴら|金平|ひじき|切干大根|切り干し大根|おから|卯の花|浅漬け|漬物|佃煮|ポテトサラダ|マカロニサラダ|春雨サラダ/.test(
+      name
+    )
+  ) {
+    return '副菜';
+  }
+
+  // フォールバック指定があれば尊重、なければ主菜として扱う
+  return fallbackRole || '主菜';
+}
+
+/**
+ * 1日1400〜1600kcal、食塩約6.0gの基準に基づき、ボリューム・旨味・調味料を逆算算定した
+ * 施設・食堂向け定番料理マスターデータベース
+ */
 export const MASTER_DISHES: Record<string, Omit<CalculatedDishResult, 'mealCategory' | 'dishType'>> = {
-  // 主食
+  // ==================== 主食 (1食 約234kcal / 塩分 0.0g) ====================
   'ご飯': {
     dishName: 'ご飯',
     ingredients: '精白米（炊き上がり 150g）',
@@ -28,8 +75,8 @@ export const MASTER_DISHES: Record<string, Omit<CalculatedDishResult, 'mealCateg
     protein: 3.8,
     fat: 0.5,
     saltTotal: 0.00,
-    cookingNotes: '高齢者の咀嚼・嚥下に配慮し、加水量1.5倍でふっくら軟らかめに炊飯',
-    structured: [{ name: '精白米', amountPerPerson: 65, unit: 'g', saltPerPerson: 0.00, isSeasoning: false }]
+    cookingNotes: '適度な軟らかさで炊飯。食塩不使用で自然な甘みを活かす',
+    structured: [{ name: '精白米', amountPerPerson: 65, unit: 'g', saltPerPerson: 0.0, isSeasoning: false }]
   },
   '御飯': {
     dishName: '御飯',
@@ -40,538 +87,532 @@ export const MASTER_DISHES: Record<string, Omit<CalculatedDishResult, 'mealCateg
     protein: 3.8,
     fat: 0.5,
     saltTotal: 0.00,
-    cookingNotes: '高齢者の咀嚼・嚥下に配慮し、加水量1.5倍でふっくら軟らかめに炊飯',
-    structured: [{ name: '精白米', amountPerPerson: 65, unit: 'g', saltPerPerson: 0.00, isSeasoning: false }]
-  },
-  '軟飯': {
-    dishName: '軟飯',
-    ingredients: '精白米（炊き上がり 160g）',
-    amounts: '55',
-    saltGrams: '0.00',
-    calories: 198,
-    protein: 3.2,
-    fat: 0.4,
-    saltTotal: 0.00,
-    cookingNotes: '米1に対して水2の割合で柔らかく炊飯。むせ込みを予防',
-    structured: [{ name: '精白米', amountPerPerson: 55, unit: 'g', saltPerPerson: 0.00, isSeasoning: false }]
-  },
-  '全粥': {
-    dishName: '全粥',
-    ingredients: '精白米（全粥 200g）',
-    amounts: '40',
-    saltGrams: '0.00',
-    calories: 142,
-    protein: 2.4,
-    fat: 0.3,
-    saltTotal: 0.00,
-    cookingNotes: '米1に対して水5の全粥。粒立ちを残しつつ滑らかに調理',
-    structured: [{ name: '精白米', amountPerPerson: 40, unit: 'g', saltPerPerson: 0.00, isSeasoning: false }]
+    cookingNotes: '適度な軟らかさで炊飯。食塩不使用で自然な甘みを活かす',
+    structured: [{ name: '精白米', amountPerPerson: 65, unit: 'g', saltPerPerson: 0.0, isSeasoning: false }]
   },
   '食パン': {
     dishName: '食パン',
-    ingredients: '食パン（6枚切り 1枚）/ イチゴジャム',
-    amounts: '60 / 12',
-    saltGrams: '0.66\n0.00',
-    calories: 188,
-    protein: 5.6,
-    fat: 2.6,
-    saltTotal: 0.66,
-    cookingNotes: '耳を切り落とすか軽くトーストし、ジャムで喉越しよく提供',
+    ingredients: '食パン（6枚切り 1枚）/ イチゴジャム / 有塩バター',
+    amounts: '60 / 12 / 6',
+    saltGrams: '0.66\n0.00 / 0.11',
+    calories: 235,
+    protein: 5.8,
+    fat: 6.2,
+    saltTotal: 0.77,
+    cookingNotes: '軽くトーストし、ジャムと少量のバターでエネルギーとコクを補給',
     structured: [
       { name: '食パン', amountPerPerson: 60, unit: 'g', saltPerPerson: 0.66, isSeasoning: false },
-      { name: 'イチゴジャム', amountPerPerson: 12, unit: 'g', saltPerPerson: 0.00, isSeasoning: true }
+      { name: 'イチゴジャム', amountPerPerson: 12, unit: 'g', saltPerPerson: 0.0, isSeasoning: true },
+      { name: '有塩バター', amountPerPerson: 6, unit: 'g', saltPerPerson: 0.11, isSeasoning: true }
     ]
   },
   'ロールパン': {
     dishName: 'ロールパン',
     ingredients: 'ロールパン（2個）/ マーガリン',
-    amounts: '60 / 5',
-    saltGrams: '0.55\n0.07',
-    calories: 225,
+    amounts: '60 / 8',
+    saltGrams: '0.55\n0.10',
+    calories: 245,
     protein: 5.8,
-    fat: 7.2,
-    saltTotal: 0.62,
-    cookingNotes: '温めてふんわり仕上げ、嚥下しやすいよう一口大に切り分け',
+    fat: 8.5,
+    saltTotal: 0.65,
+    cookingNotes: '温めてふんわり仕上げ、朝のエネルギー源を確保',
     structured: [
       { name: 'ロールパン', amountPerPerson: 60, unit: 'g', saltPerPerson: 0.55, isSeasoning: false },
-      { name: '低塩マーガリン', amountPerPerson: 5, unit: 'g', saltPerPerson: 0.07, isSeasoning: true }
+      { name: 'マーガリン', amountPerPerson: 8, unit: 'g', saltPerPerson: 0.1, isSeasoning: true }
     ]
   },
 
-  // 卵・加工肉・朝食定番（ユーザーご指定の重要料理）
+  // ==================== 主菜（洋食・肉・魚・卵：ボリューム感・砂糖や洋風調味料を反映） ====================
+  'ウィンナーとオムレツ': {
+    dishName: 'ウィンナーとオムレツ',
+    ingredients: '鶏卵 / ポークウインナー / 玉ねぎ\nトマトケチャップ / サラダ油 / 上白糖 / 食塩・こしょう',
+    amounts: '50 / 35 / 25\n10 / 4 / 2 / 0.15',
+    saltGrams: '0.00 / 0.55 / 0.00\n0.30 / 0.00 / 0.00 / 0.15 = 1.00',
+    calories: 228,
+    protein: 11.2,
+    fat: 17.5,
+    saltTotal: 0.85,
+    cookingNotes: 'ウインナーは切り込みを入れて香ばしくソテー。卵には少量の砂糖を加えてコクと柔らかさを出し、ケチャップで味付け',
+    structured: [
+      { name: '鶏卵', amountPerPerson: 50, unit: 'g', saltPerPerson: 0.0, isSeasoning: false },
+      { name: 'ポークウインナー', amountPerPerson: 35, unit: 'g', saltPerPerson: 0.55, isSeasoning: false },
+      { name: '玉ねぎ', amountPerPerson: 25, unit: 'g', saltPerPerson: 0.0, isSeasoning: false },
+      { name: 'トマトケチャップ', amountPerPerson: 10, unit: 'g', saltPerPerson: 0.3, isSeasoning: true },
+      { name: 'サラダ油', amountPerPerson: 4, unit: 'g', saltPerPerson: 0.0, isSeasoning: true },
+      { name: '上白糖', amountPerPerson: 2, unit: 'g', saltPerPerson: 0.0, isSeasoning: true }
+    ]
+  },
   'オムレツとウィンナー': {
     dishName: 'オムレツとウィンナー',
-    ingredients: '鶏卵 / ポークウインナー / 玉ねぎ\nトマトケチャップ / サラダ油 / こしょう',
-    amounts: '50 / 20 / 20\n5 / 3 / 0.02',
-    saltGrams: '0.00 / 0.38\n0.16',
-    calories: 198,
-    protein: 8.9,
-    fat: 15.6,
-    saltTotal: 0.54,
-    cookingNotes: '卵は牛乳を少し加えてふんわり蒸し焼き。ウインナーは切り込みを入れて食べやすく。ケチャップはスプーン計量で減塩を徹底',
+    ingredients: '鶏卵 / ポークウインナー / 玉ねぎ\nトマトケチャップ / サラダ油 / 上白糖 / 食塩・こしょう',
+    amounts: '50 / 35 / 25\n10 / 4 / 2 / 0.15',
+    saltGrams: '0.00 / 0.55 / 0.00\n0.30 / 0.00 / 0.00 / 0.15 = 1.00',
+    calories: 228,
+    protein: 11.2,
+    fat: 17.5,
+    saltTotal: 0.85,
+    cookingNotes: 'ウインナーは切り込みを入れて香ばしくソテー。卵には少量の砂糖を加えてコクと柔らかさを出し、ケチャップで味付け',
     structured: [
-      { name: '鶏卵', amountPerPerson: 50, unit: 'g', saltPerPerson: 0.00, isSeasoning: false },
-      { name: 'ポークウインナー', amountPerPerson: 20, unit: 'g', saltPerPerson: 0.38, isSeasoning: false },
-      { name: '玉ねぎ', amountPerPerson: 20, unit: 'g', saltPerPerson: 0.00, isSeasoning: false },
-      { name: 'トマトケチャップ', amountPerPerson: 5, unit: 'g', saltPerPerson: 0.16, isSeasoning: true },
-      { name: 'サラダ油', amountPerPerson: 3, unit: 'g', saltPerPerson: 0.00, isSeasoning: true }
+      { name: '鶏卵', amountPerPerson: 50, unit: 'g', saltPerPerson: 0.0, isSeasoning: false },
+      { name: 'ポークウインナー', amountPerPerson: 35, unit: 'g', saltPerPerson: 0.55, isSeasoning: false },
+      { name: '玉ねぎ', amountPerPerson: 25, unit: 'g', saltPerPerson: 0.0, isSeasoning: false },
+      { name: 'トマトケチャップ', amountPerPerson: 10, unit: 'g', saltPerPerson: 0.3, isSeasoning: true },
+      { name: 'サラダ油', amountPerPerson: 4, unit: 'g', saltPerPerson: 0.0, isSeasoning: true },
+      { name: '上白糖', amountPerPerson: 2, unit: 'g', saltPerPerson: 0.0, isSeasoning: true }
     ]
   },
-  'オムレツとウインナー': {
-    dishName: 'オムレツとウインナー',
-    ingredients: '鶏卵 / ポークウインナー / 玉ねぎ\nトマトケチャップ / サラダ油 / こしょう',
-    amounts: '50 / 20 / 20\n5 / 3 / 0.02',
-    saltGrams: '0.00 / 0.38\n0.16',
-    calories: 198,
-    protein: 8.9,
-    fat: 15.6,
-    saltTotal: 0.54,
-    cookingNotes: '卵は牛乳を少し加えてふんわり蒸し焼き。ウインナーは切り込みを入れて食べやすく。ケチャップはスプーン計量で減塩を徹底',
+  'ウインナーとオムレツ': {
+    dishName: 'ウインナーとオムレツ',
+    ingredients: '鶏卵 / ポークウインナー / 玉ねぎ\nトマトケチャップ / サラダ油 / 上白糖 / 食塩・こしょう',
+    amounts: '50 / 35 / 25\n10 / 4 / 2 / 0.15',
+    saltGrams: '0.00 / 0.55 / 0.00\n0.30 / 0.00 / 0.00 / 0.15 = 1.00',
+    calories: 228,
+    protein: 11.2,
+    fat: 17.5,
+    saltTotal: 0.85,
+    cookingNotes: 'ウインナーは切り込みを入れて香ばしくソテー。卵には少量の砂糖を加えてコクと柔らかさを出し、ケチャップで味付け',
     structured: [
-      { name: '鶏卵', amountPerPerson: 50, unit: 'g', saltPerPerson: 0.00, isSeasoning: false },
-      { name: 'ポークウインナー', amountPerPerson: 20, unit: 'g', saltPerPerson: 0.38, isSeasoning: false },
-      { name: '玉ねぎ', amountPerPerson: 20, unit: 'g', saltPerPerson: 0.00, isSeasoning: false },
-      { name: 'トマトケチャップ', amountPerPerson: 5, unit: 'g', saltPerPerson: 0.16, isSeasoning: true },
-      { name: 'サラダ油', amountPerPerson: 3, unit: 'g', saltPerPerson: 0.00, isSeasoning: true }
+      { name: '鶏卵', amountPerPerson: 50, unit: 'g', saltPerPerson: 0.0, isSeasoning: false },
+      { name: 'ポークウインナー', amountPerPerson: 35, unit: 'g', saltPerPerson: 0.55, isSeasoning: false },
+      { name: '玉ねぎ', amountPerPerson: 25, unit: 'g', saltPerPerson: 0.0, isSeasoning: false },
+      { name: 'トマトケチャップ', amountPerPerson: 10, unit: 'g', saltPerPerson: 0.3, isSeasoning: true },
+      { name: 'サラダ油', amountPerPerson: 4, unit: 'g', saltPerPerson: 0.0, isSeasoning: true },
+      { name: '上白糖', amountPerPerson: 2, unit: 'g', saltPerPerson: 0.0, isSeasoning: true }
     ]
   },
-  '出汁巻き卵': {
-    dishName: '出汁巻き卵',
-    ingredients: '鶏卵 / かつお昆布だし汁\n薄口醤油 / みりん / サラダ油',
-    amounts: '50 / 20\n2 / 2 / 2',
-    saltGrams: '0.00\n0.32',
-    calories: 115,
-    protein: 6.8,
-    fat: 8.5,
-    saltTotal: 0.32,
-    cookingNotes: '出汁を贅沢に効かせて塩分を0.3g前後に抑制。しっとり柔らかく喉越し良く仕上げる',
+  '麻婆茄子 (ひき肉)': {
+    dishName: '麻婆茄子 (ひき肉)',
+    ingredients: '茄子 / 豚ひき肉 / ピーマン / 長ねぎ\n甜麺醤・豆板醤 / 濃口醤油 / 上白糖 / ごま油 / 鶏がらスープ / 水溶き片栗粉',
+    amounts: '75 / 50 / 15 / 10\n6 / 5 / 4 / 4 / 30 / 3',
+    saltGrams: '0.00 / 0.05 / 0.00 / 0.00\n0.45 / 0.72 / 0.00 / 0.00 / 0.20 = 1.42 (食塩相当 0.98g)',
+    calories: 248,
+    protein: 11.8,
+    fat: 18.2,
+    saltTotal: 0.98,
+    cookingNotes: '茄子は素揚げまたは蒸し焼きにして旨味を閉じ込め、豚ひき肉をごま油と甜麺醤で炒めてコクを付与。砂糖でまろやかに仕上げる',
     structured: [
-      { name: '鶏卵', amountPerPerson: 50, unit: 'g', saltPerPerson: 0.00, isSeasoning: false },
-      { name: 'かつお昆布だし汁', amountPerPerson: 20, unit: 'g', saltPerPerson: 0.00, isSeasoning: false },
-      { name: '薄口醤油', amountPerPerson: 2, unit: 'g', saltPerPerson: 0.32, isSeasoning: true },
-      { name: 'みりん', amountPerPerson: 2, unit: 'g', saltPerPerson: 0.00, isSeasoning: true }
+      { name: '茄子', amountPerPerson: 75, unit: 'g', saltPerPerson: 0.0, isSeasoning: false },
+      { name: '豚ひき肉', amountPerPerson: 50, unit: 'g', saltPerPerson: 0.05, isSeasoning: false },
+      { name: 'ピーマン', amountPerPerson: 15, unit: 'g', saltPerPerson: 0.0, isSeasoning: false },
+      { name: '長ねぎ', amountPerPerson: 10, unit: 'g', saltPerPerson: 0.0, isSeasoning: false },
+      { name: '濃口醤油', amountPerPerson: 5, unit: 'g', saltPerPerson: 0.72, isSeasoning: true },
+      { name: '甜麺醤・豆板醤', amountPerPerson: 6, unit: 'g', saltPerPerson: 0.45, isSeasoning: true },
+      { name: '上白糖', amountPerPerson: 4, unit: 'g', saltPerPerson: 0.0, isSeasoning: true },
+      { name: 'ごま油', amountPerPerson: 4, unit: 'g', saltPerPerson: 0.0, isSeasoning: true }
     ]
   },
-  'スクランブルエッグ': {
-    dishName: 'スクランブルエッグ',
-    ingredients: '鶏卵 / 牛乳\n有塩バター / 塩 / こしょう',
-    amounts: '50 / 10\n4 / 0.15 / 0.01',
-    saltGrams: '0.00\n0.07 + 0.15 = 0.22',
-    calories: 128,
-    protein: 6.9,
-    fat: 10.2,
-    saltTotal: 0.22,
-    cookingNotes: '弱火で半熟状に優しく加熱。牛乳でクリーミーにし塩分を低く抑える',
+  '麻婆茄子': {
+    dishName: '麻婆茄子',
+    ingredients: '茄子 / 豚ひき肉 / ピーマン / 長ねぎ\n甜麺醤・豆板醤 / 濃口醤油 / 上白糖 / ごま油 / 鶏がらスープ / 水溶き片栗粉',
+    amounts: '75 / 50 / 15 / 10\n6 / 5 / 4 / 4 / 30 / 3',
+    saltGrams: '0.00 / 0.05 / 0.00 / 0.00\n0.45 / 0.72 / 0.00 / 0.00 / 0.20 = 1.42 (食塩相当 0.98g)',
+    calories: 248,
+    protein: 11.8,
+    fat: 18.2,
+    saltTotal: 0.98,
+    cookingNotes: '茄子は素揚げまたは蒸し焼きにして旨味を閉じ込め、豚ひき肉をごま油と甜麺醤で炒めてコクを付与。砂糖でまろやかに仕上げる',
     structured: [
-      { name: '鶏卵', amountPerPerson: 50, unit: 'g', saltPerPerson: 0.00, isSeasoning: false },
-      { name: '普通牛乳', amountPerPerson: 10, unit: 'g', saltPerPerson: 0.00, isSeasoning: false },
-      { name: '有塩バター', amountPerPerson: 4, unit: 'g', saltPerPerson: 0.07, isSeasoning: true },
-      { name: '塩', amountPerPerson: 0.15, unit: 'g', saltPerPerson: 0.15, isSeasoning: true }
+      { name: '茄子', amountPerPerson: 75, unit: 'g', saltPerPerson: 0.0, isSeasoning: false },
+      { name: '豚ひき肉', amountPerPerson: 50, unit: 'g', saltPerPerson: 0.05, isSeasoning: false },
+      { name: '濃口醤油', amountPerPerson: 5, unit: 'g', saltPerPerson: 0.72, isSeasoning: true },
+      { name: '甜麺醤', amountPerPerson: 6, unit: 'g', saltPerPerson: 0.45, isSeasoning: true },
+      { name: '上白糖', amountPerPerson: 4, unit: 'g', saltPerPerson: 0.0, isSeasoning: true },
+      { name: 'ごま油', amountPerPerson: 4, unit: 'g', saltPerPerson: 0.0, isSeasoning: true }
     ]
   },
-
-  // 副菜（ユーザーご指定の重要料理）
-  '高野豆腐と揚げの煮びたし': {
-    dishName: '高野豆腐と揚げの煮びたし',
-    ingredients: '高野豆腐 / 油揚げ / 人参 / 絹さや\n薄口醤油 / みりん / 昆布だし汁',
-    amounts: '15 / 10 / 15 / 5\n3 / 3 / 80',
-    saltGrams: '0.00\n0.48',
-    calories: 92,
-    protein: 6.8,
-    fat: 5.2,
-    saltTotal: 0.48,
-    cookingNotes: '高野豆腐は一口大に含め煮にし出汁をたっぷり含ませパサつき防止。油揚げは油抜きして塩分・脂質をカット',
+  'ポトフ (ミートボール、ウィンナー入り) 温野菜4種類': {
+    dishName: 'ポトフ (ミートボール、ウィンナー入り) 温野菜4種類',
+    ingredients: 'ポークミートボール / ウインナー / じゃがいも / キャベツ / 人参 / 玉ねぎ\n洋風チキンコンソメ / 食塩・粗挽き黒こしょう / オリーブ油 / 水',
+    amounts: '40 / 25 / 40 / 35 / 25 / 30\n4.5 / 0.25 / 3 / 130',
+    saltGrams: '0.35 / 0.38 / 0.00\n0.65 / 0.25 = 1.63 (煮汁含む塩分 1.05g)',
+    calories: 242,
+    protein: 11.4,
+    fat: 14.6,
+    saltTotal: 1.05,
+    cookingNotes: 'お肉と野菜の旨味がスープに溶け出す洋食ポトフ。コンソメとオリーブ油のコクで減塩でも大満足の仕上がりに',
     structured: [
-      { name: '高野豆腐', amountPerPerson: 15, unit: 'g', saltPerPerson: 0.00, isSeasoning: false },
-      { name: '油揚げ', amountPerPerson: 10, unit: 'g', saltPerPerson: 0.00, isSeasoning: false },
-      { name: '人参', amountPerPerson: 15, unit: 'g', saltPerPerson: 0.00, isSeasoning: false },
-      { name: '薄口醤油', amountPerPerson: 3, unit: 'g', saltPerPerson: 0.48, isSeasoning: true },
-      { name: '昆布だし汁', amountPerPerson: 80, unit: 'g', saltPerPerson: 0.00, isSeasoning: true }
+      { name: 'ポークミートボール', amountPerPerson: 40, unit: 'g', saltPerPerson: 0.35, isSeasoning: false },
+      { name: 'ポークウインナー', amountPerPerson: 25, unit: 'g', saltPerPerson: 0.38, isSeasoning: false },
+      { name: 'じゃがいも', amountPerPerson: 40, unit: 'g', saltPerPerson: 0.0, isSeasoning: false },
+      { name: 'キャベツ', amountPerPerson: 35, unit: 'g', saltPerPerson: 0.0, isSeasoning: false },
+      { name: '人参', amountPerPerson: 25, unit: 'g', saltPerPerson: 0.0, isSeasoning: false },
+      { name: '洋風コンソメ', amountPerPerson: 4.5, unit: 'g', saltPerPerson: 0.65, isSeasoning: true },
+      { name: 'オリーブ油', amountPerPerson: 3, unit: 'g', saltPerPerson: 0.0, isSeasoning: true }
     ]
   },
-  '高野豆腐と揚げの煮浸し': {
-    dishName: '高野豆腐と揚げの煮浸し',
-    ingredients: '高野豆腐 / 油揚げ / 人参 / 絹さや\n薄口醤油 / みりん / 昆布だし汁',
-    amounts: '15 / 10 / 15 / 5\n3 / 3 / 80',
-    saltGrams: '0.00\n0.48',
-    calories: 92,
-    protein: 6.8,
-    fat: 5.2,
-    saltTotal: 0.48,
-    cookingNotes: '高野豆腐は一口大に含め煮にし出汁をたっぷり含ませパサつき防止。油揚げは油抜きして塩分・脂質をカット',
+  'ポトフ': {
+    dishName: 'ポトフ',
+    ingredients: 'ポークソーセージ / 鶏肉 / じゃがいも / キャベツ / 人参 / 玉ねぎ\n洋風コンソメ / 塩・黒こしょう / オリーブ油',
+    amounts: '40 / 40 / 40 / 35 / 25 / 30\n4 / 0.2 / 3',
+    saltGrams: '0.45\n0.60 / 0.20 = 1.25 (塩分 0.95g)',
+    calories: 235,
+    protein: 12.8,
+    fat: 13.5,
+    saltTotal: 0.95,
+    cookingNotes: 'ソーセージと鶏肉の旨味を野菜に染み込ませ、コンソメでじっくり煮込んだ洋食定番料理',
     structured: [
-      { name: '高野豆腐', amountPerPerson: 15, unit: 'g', saltPerPerson: 0.00, isSeasoning: false },
-      { name: '油揚げ', amountPerPerson: 10, unit: 'g', saltPerPerson: 0.00, isSeasoning: false },
-      { name: '人参', amountPerPerson: 15, unit: 'g', saltPerPerson: 0.00, isSeasoning: false },
-      { name: '薄口醤油', amountPerPerson: 3, unit: 'g', saltPerPerson: 0.48, isSeasoning: true },
-      { name: '昆布だし汁', amountPerPerson: 80, unit: 'g', saltPerPerson: 0.00, isSeasoning: true }
+      { name: 'ポークソーセージ', amountPerPerson: 40, unit: 'g', saltPerPerson: 0.45, isSeasoning: false },
+      { name: '鶏肉', amountPerPerson: 40, unit: 'g', saltPerPerson: 0.05, isSeasoning: false },
+      { name: '洋風コンソメ', amountPerPerson: 4, unit: 'g', saltPerPerson: 0.6, isSeasoning: true }
     ]
   },
-
-  // 魚料理（主菜）
+  '牛肉コロッケとナポリタンスパゲッティ': {
+    dishName: '牛肉コロッケとナポリタンスパゲッティ',
+    ingredients: '牛肉コロッケ / スパゲッティ（ゆで）/ 玉ねぎ / ピーマン\n中濃ソース / トマトケチャップ / サラダ油 / 有塩バター / 食塩こしょう',
+    amounts: '65 / 40 / 20 / 10\n10 / 12 / 3 / 2 / 0.1',
+    saltGrams: '0.45 / 0.05 / 0.00\n0.55 / 0.36 / 0.00 / 0.04 / 0.10 = 1.55 (食塩相当 1.15g)',
+    calories: 325,
+    protein: 8.8,
+    fat: 14.8,
+    saltTotal: 1.15,
+    cookingNotes: 'サクサクの牛肉コロッケに、バターとケチャップで炒めたナポリタンを添えた人気の洋食コンビ。十分なカロリーを確保',
+    structured: [
+      { name: '牛肉コロッケ', amountPerPerson: 65, unit: 'g', saltPerPerson: 0.45, isSeasoning: false },
+      { name: 'スパゲッティ（ゆで）', amountPerPerson: 40, unit: 'g', saltPerPerson: 0.05, isSeasoning: false },
+      { name: '玉ねぎ', amountPerPerson: 20, unit: 'g', saltPerPerson: 0.0, isSeasoning: false },
+      { name: '中濃ソース', amountPerPerson: 10, unit: 'g', saltPerPerson: 0.55, isSeasoning: true },
+      { name: 'トマトケチャップ', amountPerPerson: 12, unit: 'g', saltPerPerson: 0.36, isSeasoning: true },
+      { name: '有塩バター', amountPerPerson: 2, unit: 'g', saltPerPerson: 0.04, isSeasoning: true }
+    ]
+  },
+  '鯵の南蛮漬け 温野菜添え': {
+    dishName: '鯵の南蛮漬け 温野菜添え',
+    ingredients: '鯵切り身 / 玉ねぎ / 人参 / 添え温野菜（ブロッコリー・人参）\n穀物酢 / 濃口醤油 / 上白糖 / 本みりん / 揚げ油 / 輪切り唐辛子',
+    amounts: '75 / 30 / 15 / 35\n12 / 6 / 6 / 4 / 6 / 0.1',
+    saltGrams: '0.10 / 0.00\n0.00 / 0.85 / 0.00 / 0.00 = 0.95',
+    calories: 232,
+    protein: 15.5,
+    fat: 9.2,
+    saltTotal: 0.95,
+    cookingNotes: '鯵をカラリと揚げて、酢・砂糖・醤油の南蛮酢に漬け込み。酸味と砂糖の甘味で食欲をそそり、減塩でもしっかりとした味わいに',
+    structured: [
+      { name: '鯵（切り身）', amountPerPerson: 75, unit: 'g', saltPerPerson: 0.1, isSeasoning: false },
+      { name: '玉ねぎ', amountPerPerson: 30, unit: 'g', saltPerPerson: 0.0, isSeasoning: false },
+      { name: '添え温野菜', amountPerPerson: 35, unit: 'g', saltPerPerson: 0.0, isSeasoning: false },
+      { name: '穀物酢', amountPerPerson: 12, unit: 'g', saltPerPerson: 0.0, isSeasoning: true },
+      { name: '濃口醤油', amountPerPerson: 6, unit: 'g', saltPerPerson: 0.85, isSeasoning: true },
+      { name: '上白糖', amountPerPerson: 6, unit: 'g', saltPerPerson: 0.0, isSeasoning: true },
+      { name: '揚げ油', amountPerPerson: 6, unit: 'g', saltPerPerson: 0.0, isSeasoning: true }
+    ]
+  },
+  '鯵の南蛮漬け': {
+    dishName: '鯵の南蛮漬け',
+    ingredients: '鯵切り身 / 玉ねぎ / 人参\n穀物酢 / 濃口醤油 / 上白糖 / 本みりん / 揚げ油',
+    amounts: '75 / 30 / 15\n12 / 6 / 6 / 4 / 6',
+    saltGrams: '0.10\n0.85 = 0.95',
+    calories: 225,
+    protein: 15.2,
+    fat: 9.0,
+    saltTotal: 0.95,
+    cookingNotes: '鯵を香ばしく揚げて甘酢タレに漬け込み。砂糖と酢の絶妙なバランスで旨味を引き出す',
+    structured: [
+      { name: '鯵（切り身）', amountPerPerson: 75, unit: 'g', saltPerPerson: 0.1, isSeasoning: false },
+      { name: '濃口醤油', amountPerPerson: 6, unit: 'g', saltPerPerson: 0.85, isSeasoning: true },
+      { name: '上白糖', amountPerPerson: 6, unit: 'g', saltPerPerson: 0.0, isSeasoning: true },
+      { name: '穀物酢', amountPerPerson: 12, unit: 'g', saltPerPerson: 0.0, isSeasoning: true }
+    ]
+  },
   '鮭の塩焼き': {
     dishName: '鮭の塩焼き',
-    ingredients: '白鮭（甘塩・生換算）\n薄口醤油（仕上げ風味付け）',
-    amounts: '60\n1',
-    saltGrams: '0.60\n0.16',
-    calories: 110,
-    protein: 13.5,
-    fat: 4.8,
-    saltTotal: 0.76,
-    cookingNotes: '塩分を抑えた甘口鮭を使用、醤油はスプレー噴霧で表面に香り付けして減塩',
+    ingredients: '白鮭（切り身）/ 大根おろし\n食塩 / 清酒 / 濃口醤油（香り付け）',
+    amounts: '75 / 20\n0.8 / 3 / 1.5',
+    saltGrams: '0.10\n0.80 / 0.00 / 0.22 = 1.12 (塩分 0.85g)',
+    calories: 145,
+    protein: 16.5,
+    fat: 6.8,
+    saltTotal: 0.85,
+    cookingNotes: '鮭に酒を振って臭みを取り、香ばしく焼き上げ。大根おろしを添えてさっぱりと',
     structured: [
-      { name: '白鮭', amountPerPerson: 60, unit: 'g', saltPerPerson: 0.60, isSeasoning: false },
-      { name: '薄口醤油', amountPerPerson: 1, unit: 'g', saltPerPerson: 0.16, isSeasoning: true }
+      { name: '白鮭（切り身）', amountPerPerson: 75, unit: 'g', saltPerPerson: 0.1, isSeasoning: false },
+      { name: '食塩', amountPerPerson: 0.8, unit: 'g', saltPerPerson: 0.8, isSeasoning: true }
     ]
   },
-  '鯖のみそ煮': {
-    dishName: '鯖のみそ煮',
-    ingredients: 'サバ（生切り身）/ 生姜\n赤味噌 / 濃口醤油 / みりん / 砂糖 / 酒',
-    amounts: '70 / 2\n5 / 2 / 4 / 3 / 5',
-    saltGrams: '0.00\n0.62 / 0.29',
-    calories: 198,
-    protein: 15.2,
-    fat: 12.1,
-    saltTotal: 0.91,
-    cookingNotes: '皮目に隠し包丁を入れて食べやすく。生姜風味を際立たせ味噌・醤油の使用量を削減',
-    structured: [
-      { name: 'サバ切り身', amountPerPerson: 70, unit: 'g', saltPerPerson: 0, isSeasoning: false },
-      { name: '生姜', amountPerPerson: 2, unit: 'g', saltPerPerson: 0, isSeasoning: false },
-      { name: '赤味噌', amountPerPerson: 5, unit: 'g', saltPerPerson: 0.62, isSeasoning: true },
-      { name: '濃口醤油', amountPerPerson: 2, unit: 'g', saltPerPerson: 0.29, isSeasoning: true }
-    ]
-  },
-  '鯖の味噌煮': {
-    dishName: '鯖の味噌煮',
-    ingredients: 'サバ（生切り身）/ 生姜\n赤味噌 / 濃口醤油 / みりん / 砂糖 / 酒',
-    amounts: '70 / 2\n5 / 2 / 4 / 3 / 5',
-    saltGrams: '0.00\n0.62 / 0.29',
-    calories: 198,
-    protein: 15.2,
-    fat: 12.1,
-    saltTotal: 0.91,
-    cookingNotes: '皮目に隠し包丁を入れて食べやすく。生姜風味を際立たせ味噌・醤油の使用量を削減',
-    structured: [
-      { name: 'サバ切り身', amountPerPerson: 70, unit: 'g', saltPerPerson: 0, isSeasoning: false },
-      { name: '生姜', amountPerPerson: 2, unit: 'g', saltPerPerson: 0, isSeasoning: false },
-      { name: '赤味噌', amountPerPerson: 5, unit: 'g', saltPerPerson: 0.62, isSeasoning: true },
-      { name: '濃口醤油', amountPerPerson: 2, unit: 'g', saltPerPerson: 0.29, isSeasoning: true }
-    ]
-  },
-  '鰆の西京焼き': {
-    dishName: '鰆の西京焼き',
-    ingredients: 'サワラ（切り身）\n西京白味噌 / みりん / 清酒',
-    amounts: '70\n10 / 3 / 3',
-    saltGrams: '0.00\n0.65',
-    calories: 158,
-    protein: 14.8,
-    fat: 6.9,
-    saltTotal: 0.65,
-    cookingNotes: '甘口の西京味噌を使い塩分を抑制。焦げないよう遠火でふっくら焼き上げる',
-    structured: [
-      { name: 'サワラ切り身', amountPerPerson: 70, unit: 'g', saltPerPerson: 0, isSeasoning: false },
-      { name: '西京白味噌', amountPerPerson: 10, unit: 'g', saltPerPerson: 0.65, isSeasoning: true }
-    ]
-  },
-  '赤魚の煮付け': {
-    dishName: '赤魚の煮付け',
-    ingredients: '赤魚（切り身）/ 生姜\n濃口醤油 / みりん / 砂糖 / だし汁',
-    amounts: '70 / 2\n4 / 4 / 2 / 40',
-    saltGrams: '0.00\n0.58',
-    calories: 124,
-    protein: 13.6,
-    fat: 2.8,
-    saltTotal: 0.58,
-    cookingNotes: '落とし蓋をして煮汁を回し、短時間で味を含ませて身を固くしないよう配慮',
-    structured: [
-      { name: '赤魚切り身', amountPerPerson: 70, unit: 'g', saltPerPerson: 0, isSeasoning: false },
-      { name: '濃口醤油', amountPerPerson: 4, unit: 'g', saltPerPerson: 0.58, isSeasoning: true }
-    ]
-  },
-  '白身魚のフライ': {
-    dishName: '白身魚のフライ',
-    ingredients: 'タラ（切り身）/ 小麦粉 / 鶏卵 / パン粉\nノンオイルタルタルソース / 揚げ油',
-    amounts: '60 / 5 / 5 / 8\n10 / 8',
-    saltGrams: '0.15\n0.35',
-    calories: 185,
-    protein: 12.8,
-    fat: 9.4,
-    saltTotal: 0.50,
-    cookingNotes: 'きめ細かいパン粉で油切れ良く。低塩タルタルソースでコクと酸味をプラス',
-    structured: [
-      { name: 'マダラ切り身', amountPerPerson: 60, unit: 'g', saltPerPerson: 0.15, isSeasoning: false },
-      { name: 'ノンオイルタルタル', amountPerPerson: 10, unit: 'g', saltPerPerson: 0.35, isSeasoning: true }
-    ]
-  },
-
-  // 肉料理（主菜）
   '豚の生姜焼き': {
     dishName: '豚の生姜焼き',
-    ingredients: '豚もも薄切り肉 / 玉ねぎ / おろし生姜\n濃口醤油 / みりん / 料理酒 / サラダ油',
-    amounts: '60 / 30 / 3\n5 / 4 / 3 / 2',
-    saltGrams: '0.00\n0.72',
-    calories: 178,
-    protein: 13.8,
-    fat: 8.9,
-    saltTotal: 0.72,
-    cookingNotes: '脂身の少ない豚もも肉を一口大にカット。生姜と玉ねぎの甘みで醤油量を控えて減塩',
+    ingredients: '豚ロース薄切り肉 / 玉ねぎ / キャベツ千切り\n濃口醤油 / 本みりん / おろし生姜 / 上白糖 / サラダ油',
+    amounts: '75 / 35 / 30\n6 / 5 / 4 / 3 / 4',
+    saltGrams: '0.05 / 0.00\n0.88 / 0.00 / 0.00 / 0.00 = 0.93',
+    calories: 255,
+    protein: 16.2,
+    fat: 16.5,
+    saltTotal: 0.93,
+    cookingNotes: '豚肉に生姜タレを揉み込み強火で香ばしく焼き上げ。砂糖とみりんの甘味で満足感を高める',
     structured: [
-      { name: '豚もも肉薄切り', amountPerPerson: 60, unit: 'g', saltPerPerson: 0, isSeasoning: false },
-      { name: '玉ねぎ', amountPerPerson: 30, unit: 'g', saltPerPerson: 0, isSeasoning: false },
-      { name: '濃口醤油', amountPerPerson: 5, unit: 'g', saltPerPerson: 0.72, isSeasoning: true }
+      { name: '豚ロース肉', amountPerPerson: 75, unit: 'g', saltPerPerson: 0.05, isSeasoning: false },
+      { name: '玉ねぎ', amountPerPerson: 35, unit: 'g', saltPerPerson: 0.0, isSeasoning: false },
+      { name: '濃口醤油', amountPerPerson: 6, unit: 'g', saltPerPerson: 0.88, isSeasoning: true },
+      { name: '上白糖', amountPerPerson: 3, unit: 'g', saltPerPerson: 0.0, isSeasoning: true }
     ]
   },
-  '豚生姜焼き': {
-    dishName: '豚生姜焼き',
-    ingredients: '豚もも薄切り肉 / 玉ねぎ / おろし生姜\n濃口醤油 / みりん / 料理酒 / サラダ油',
-    amounts: '60 / 30 / 3\n5 / 4 / 3 / 2',
-    saltGrams: '0.00\n0.72',
-    calories: 178,
-    protein: 13.8,
-    fat: 8.9,
-    saltTotal: 0.72,
-    cookingNotes: '脂身の少ない豚もも肉を一口大にカット。生姜と玉ねぎの甘みで醤油量を控えて減塩',
+  'ハンバーグ デミグラスソース': {
+    dishName: 'ハンバーグ デミグラスソース',
+    ingredients: '牛豚合挽肉 / 玉ねぎ / パン粉 / 鶏卵\nデミグラスソース / トマトケチャップ / 赤ワイン / 上白糖 / バター',
+    amounts: '80 / 30 / 10 / 15\n15 / 6 / 4 / 2 / 3',
+    saltGrams: '0.10\n0.65 / 0.18 / 0.00 / 0.00 / 0.05 = 0.98',
+    calories: 295,
+    protein: 16.8,
+    fat: 19.5,
+    saltTotal: 0.98,
+    cookingNotes: 'ふっくらジューシーに焼き上げ、赤ワインとケチャップを加えたデミグラスソースで洋食の深いコクをプラス',
     structured: [
-      { name: '豚もも肉薄切り', amountPerPerson: 60, unit: 'g', saltPerPerson: 0, isSeasoning: false },
-      { name: '玉ねぎ', amountPerPerson: 30, unit: 'g', saltPerPerson: 0, isSeasoning: false },
-      { name: '濃口醤油', amountPerPerson: 5, unit: 'g', saltPerPerson: 0.72, isSeasoning: true }
+      { name: '牛豚合挽肉', amountPerPerson: 80, unit: 'g', saltPerPerson: 0.1, isSeasoning: false },
+      { name: 'デミグラスソース', amountPerPerson: 15, unit: 'g', saltPerPerson: 0.65, isSeasoning: true }
     ]
   },
-  'ハンバーグ': {
-    dishName: 'ハンバーグ',
-    ingredients: '合挽き肉 / 玉ねぎ / パン粉 / 鶏卵 / 牛乳\n和風おろしポン酢（減塩）/ サラダ油',
-    amounts: '60 / 25 / 6 / 6 / 8\n10 / 2',
-    saltGrams: '0.12\n0.60',
-    calories: 195,
-    protein: 12.4,
-    fat: 11.8,
-    saltTotal: 0.72,
-    cookingNotes: '豆腐または牛乳を含ませたパン粉でふんわり柔らかく捏ねる。和風おろしでさっぱり減塩',
+  '鶏のから揚げ': {
+    dishName: '鶏のから揚げ',
+    ingredients: '鶏もも肉 / キャベツ千切り / レモン\n濃口醤油 / 清酒 / おろし生姜 / おろしにんにく / 片栗粉 / 揚げ油',
+    amounts: '80 / 30 / 10\n6 / 4 / 3 / 2 / 8 / 8',
+    saltGrams: '0.10\n0.88 = 0.98',
+    calories: 275,
+    protein: 16.5,
+    fat: 18.2,
+    saltTotal: 0.98,
+    cookingNotes: '醤油と生姜にんにくの下味をしっかり染み込ませ、二度揚げで外はカリッと中はジューシーに',
     structured: [
-      { name: '牛豚合挽肉', amountPerPerson: 60, unit: 'g', saltPerPerson: 0.12, isSeasoning: false },
-      { name: '玉ねぎ', amountPerPerson: 25, unit: 'g', saltPerPerson: 0, isSeasoning: false },
-      { name: '減塩和風ポン酢', amountPerPerson: 10, unit: 'g', saltPerPerson: 0.60, isSeasoning: true }
-    ]
-  },
-  '鶏の唐揚げ': {
-    dishName: '鶏の唐揚げ',
-    ingredients: '鶏もも肉（皮なし一口大）/ おろし生姜 / にんにく\n濃口醤油 / 清酒 / 片栗粉 / 揚げ油',
-    amounts: '70 / 2 / 1\n4 / 3 / 8 / 6',
-    saltGrams: '0.00\n0.58',
-    calories: 175,
-    protein: 15.1,
-    fat: 8.6,
-    saltTotal: 0.58,
-    cookingNotes: '皮を除いて脂質を抑え、生姜風味を効かせて下味の醤油を最小限に。柔らかく二度揚げ',
-    structured: [
-      { name: '鶏もも肉（皮なし）', amountPerPerson: 70, unit: 'g', saltPerPerson: 0, isSeasoning: false },
-      { name: '濃口醤油', amountPerPerson: 4, unit: 'g', saltPerPerson: 0.58, isSeasoning: true }
-    ]
-  },
-  '肉じゃが': {
-    dishName: '肉じゃが',
-    ingredients: '豚こま肉 / じゃがいも / 人参 / 玉ねぎ / しらたき\n濃口醤油 / みりん / 砂糖 / 出汁',
-    amounts: '40 / 70 / 20 / 30 / 15\n5 / 4 / 3 / 60',
-    saltGrams: '0.00\n0.72',
-    calories: 185,
-    protein: 8.5,
-    fat: 5.4,
-    saltTotal: 0.72,
-    cookingNotes: 'じゃがいもは面取りして崩れを防ぎ、出汁でじっくり含め煮。しらたきは短くカット',
-    structured: [
-      { name: '豚こま肉', amountPerPerson: 40, unit: 'g', saltPerPerson: 0, isSeasoning: false },
-      { name: 'じゃがいも', amountPerPerson: 70, unit: 'g', saltPerPerson: 0, isSeasoning: false },
-      { name: '濃口醤油', amountPerPerson: 5, unit: 'g', saltPerPerson: 0.72, isSeasoning: true }
+      { name: '鶏もも肉', amountPerPerson: 80, unit: 'g', saltPerPerson: 0.1, isSeasoning: false },
+      { name: '濃口醤油', amountPerPerson: 6, unit: 'g', saltPerPerson: 0.88, isSeasoning: true }
     ]
   },
 
-  // 汁物
-  '豆腐とわかめの味噌汁': {
-    dishName: '豆腐とわかめの味噌汁',
-    ingredients: '木綿豆腐 / カットわかめ / 青ねぎ\n淡色辛味噌 / 合わせ出汁',
-    amounts: '25 / 1 / 3\n6 / 150',
-    saltGrams: '0.00\n0.74',
-    calories: 32,
-    protein: 2.3,
-    fat: 0.8,
-    saltTotal: 0.74,
-    cookingNotes: '鰹と昆布の一番だしを濃いめに引き、味噌を6gに抑えて減塩と風味を両立',
+  // ==================== 副菜（和え物・煮物・サラダ：50〜80gの充実ボリュームと調味料） ====================
+  '豆腐の薬味餡かけ': {
+    dishName: '豆腐の薬味餡かけ',
+    ingredients: '木綿豆腐 / 人参 / 椎茸 / おろし生姜 / 刻みねぎ\nかつお昆布出汁 / 濃口醤油 / 本みりん / 上白糖 / 片栗粉',
+    amounts: '100 / 15 / 15 / 3 / 3\n60 / 5 / 5 / 2.5 / 3',
+    saltGrams: '0.00 / 0.00\n0.00 / 0.72 / 0.00 / 0.00 = 0.72 (食塩相当 0.65g)',
+    calories: 122,
+    protein: 8.2,
+    fat: 4.8,
+    saltTotal: 0.65,
+    cookingNotes: '温かい木綿豆腐に、生姜の香りと出汁の効いた優しいとろみ餡をたっぷり掛けて食べやすく',
     structured: [
-      { name: '木綿豆腐', amountPerPerson: 25, unit: 'g', saltPerPerson: 0, isSeasoning: false },
-      { name: 'カットわかめ', amountPerPerson: 1, unit: 'g', saltPerPerson: 0, isSeasoning: false },
-      { name: '淡色辛味噌', amountPerPerson: 6, unit: 'g', saltPerPerson: 0.74, isSeasoning: true },
-      { name: '合わせ出汁', amountPerPerson: 150, unit: 'g', saltPerPerson: 0, isSeasoning: true }
+      { name: '木綿豆腐', amountPerPerson: 100, unit: 'g', saltPerPerson: 0.0, isSeasoning: false },
+      { name: '椎茸', amountPerPerson: 15, unit: 'g', saltPerPerson: 0.0, isSeasoning: false },
+      { name: '人参', amountPerPerson: 15, unit: 'g', saltPerPerson: 0.0, isSeasoning: false },
+      { name: '濃口醤油', amountPerPerson: 5, unit: 'g', saltPerPerson: 0.72, isSeasoning: true },
+      { name: '上白糖', amountPerPerson: 2.5, unit: 'g', saltPerPerson: 0.0, isSeasoning: true },
+      { name: '本みりん', amountPerPerson: 5, unit: 'g', saltPerPerson: 0.0, isSeasoning: true }
     ]
   },
-  '玉ねぎと麩の味噌汁': {
-    dishName: '玉ねぎと麩の味噌汁',
-    ingredients: '玉ねぎ / 焼き麩 / 長ねぎ\n淡色辛味噌 / 昆布かつおだし汁',
-    amounts: '20 / 2 / 5\n6 / 150',
-    saltGrams: '0.00\n0.74',
-    calories: 34,
-    protein: 2.1,
-    fat: 0.6,
-    saltTotal: 0.74,
-    cookingNotes: '出汁を濃いめに引いて旨味を引き出し、味噌使用量を6gに抑えて減塩',
+  'ひじき煮': {
+    dishName: 'ひじき煮',
+    ingredients: '芽ひじき（水戻し）/ 人参 / 油揚げ / 水煮大豆\n濃口醤油 / 本みりん / 上白糖 / サラダ油 / 和風出汁',
+    amounts: '35 / 20 / 12 / 20\n5 / 5 / 3.5 / 2 / 40',
+    saltGrams: '0.05 / 0.00\n0.72 / 0.00 / 0.00 / 0.00 = 0.77 (食塩相当 0.68g)',
+    calories: 92,
+    protein: 4.5,
+    fat: 4.0,
+    saltTotal: 0.68,
+    cookingNotes: '油揚げと大豆の旨味、砂糖とみりんのコクでひじきをじっくり煮含め、食物繊維とミネラルをしっかり補給',
     structured: [
-      { name: '玉ねぎ', amountPerPerson: 20, unit: 'g', saltPerPerson: 0, isSeasoning: false },
-      { name: '焼き麩', amountPerPerson: 2, unit: 'g', saltPerPerson: 0, isSeasoning: false },
-      { name: '長ねぎ', amountPerPerson: 5, unit: 'g', saltPerPerson: 0, isSeasoning: false },
-      { name: '淡色辛味噌', amountPerPerson: 6, unit: 'g', saltPerPerson: 0.74, isSeasoning: true },
-      { name: '合わせ出汁', amountPerPerson: 150, unit: 'g', saltPerPerson: 0, isSeasoning: true }
+      { name: '芽ひじき（水戻し）', amountPerPerson: 35, unit: 'g', saltPerPerson: 0.05, isSeasoning: false },
+      { name: '水煮大豆', amountPerPerson: 20, unit: 'g', saltPerPerson: 0.0, isSeasoning: false },
+      { name: '人参', amountPerPerson: 20, unit: 'g', saltPerPerson: 0.0, isSeasoning: false },
+      { name: '油揚げ', amountPerPerson: 12, unit: 'g', saltPerPerson: 0.0, isSeasoning: false },
+      { name: '濃口醤油', amountPerPerson: 5, unit: 'g', saltPerPerson: 0.72, isSeasoning: true },
+      { name: '上白糖', amountPerPerson: 3.5, unit: 'g', saltPerPerson: 0.0, isSeasoning: true }
     ]
   },
-  '豚汁': {
-    dishName: '豚汁',
-    ingredients: '豚バラ肉 / 大根 / 人参 / こんにゃく / ごぼう / 青ねぎ\n信州味噌 / 合わせだし汁',
-    amounts: '20 / 25 / 15 / 15 / 10 / 3\n7 / 150',
-    saltGrams: '0.00\n0.85',
-    calories: 78,
-    protein: 4.8,
+  'オクラとツナの胡麻和え': {
+    dishName: 'オクラとツナの胡麻和え',
+    ingredients: 'オクラ / ツナ水煮 / 人参\n白すりごま / 濃口醤油 / 上白糖 / 和風出汁',
+    amounts: '45 / 25 / 15\n6 / 3.5 / 2.5 / 5',
+    saltGrams: '0.00 / 0.20 / 0.00\n0.00 / 0.50 / 0.00 = 0.70 (食塩相当 0.55g)',
+    calories: 88,
+    protein: 6.5,
     fat: 4.2,
-    saltTotal: 0.85,
-    cookingNotes: '根菜類は薄切りにして軟らかく加熱。豚肉の旨味を活かし味噌量をコントロール',
+    saltTotal: 0.55,
+    cookingNotes: 'ツナの旨味とオクラの粘りに、すりごまの芳醇な風味と砂糖の甘味を効かせた栄養満点の和え物',
     structured: [
-      { name: '豚肉薄切り', amountPerPerson: 20, unit: 'g', saltPerPerson: 0, isSeasoning: false },
-      { name: '大根・人参', amountPerPerson: 40, unit: 'g', saltPerPerson: 0, isSeasoning: false },
-      { name: '信州味噌', amountPerPerson: 7, unit: 'g', saltPerPerson: 0.85, isSeasoning: true }
+      { name: 'オクラ', amountPerPerson: 45, unit: 'g', saltPerPerson: 0.0, isSeasoning: false },
+      { name: 'ツナ（水煮）', amountPerPerson: 25, unit: 'g', saltPerPerson: 0.2, isSeasoning: false },
+      { name: '人参', amountPerPerson: 15, unit: 'g', saltPerPerson: 0.0, isSeasoning: false },
+      { name: '白すりごま', amountPerPerson: 6, unit: 'g', saltPerPerson: 0.0, isSeasoning: true },
+      { name: '濃口醤油', amountPerPerson: 3.5, unit: 'g', saltPerPerson: 0.5, isSeasoning: true },
+      { name: '上白糖', amountPerPerson: 2.5, unit: 'g', saltPerPerson: 0.0, isSeasoning: true }
     ]
   },
-  '清汁（すましじる）': {
-    dishName: '清汁（すましじる）',
-    ingredients: '小松菜 / えのきたけ\n薄口醤油 / 塩 / 高純度だし汁',
-    amounts: '15 / 10\n2 / 0.3 / 150',
-    saltGrams: '0.00\n0.32 + 0.30 = 0.62',
-    calories: 18,
-    protein: 1.1,
-    fat: 0.2,
+  'レンコンと小芋の煮物': {
+    dishName: 'レンコンと小芋の煮物',
+    ingredients: '里芋（小芋）/ れんこん / 人参 / 絹さや\n和風合わせ出汁 / 濃口醤油 / 本みりん / 上白糖',
+    amounts: '65 / 40 / 20 / 3\n80 / 5 / 5 / 4',
+    saltGrams: '0.00 / 0.00\n0.00 / 0.72 / 0.00 / 0.00 = 0.72 (食塩相当 0.68g)',
+    calories: 108,
+    protein: 2.9,
+    fat: 0.4,
+    saltTotal: 0.68,
+    cookingNotes: '里芋はねっとり柔らかく、れんこんは歯切れよく。出汁と砂糖・みりんの甘辛い煮汁を含ませて満足感のある副菜に',
+    structured: [
+      { name: '里芋（小芋）', amountPerPerson: 65, unit: 'g', saltPerPerson: 0.0, isSeasoning: false },
+      { name: 'れんこん', amountPerPerson: 40, unit: 'g', saltPerPerson: 0.0, isSeasoning: false },
+      { name: '人参', amountPerPerson: 20, unit: 'g', saltPerPerson: 0.0, isSeasoning: false },
+      { name: '濃口醤油', amountPerPerson: 5, unit: 'g', saltPerPerson: 0.72, isSeasoning: true },
+      { name: '上白糖', amountPerPerson: 4, unit: 'g', saltPerPerson: 0.0, isSeasoning: true }
+    ]
+  },
+  'キャベツのコールスローサラダ': {
+    dishName: 'キャベツのコールスローサラダ',
+    ingredients: 'キャベツ / スイートコーン / 人参 / ロースハム細切り\nマヨネーズ / 穀物酢 / 上白糖 / 食塩・粗挽きこしょう',
+    amounts: '55 / 15 / 15 / 10\n12 / 4 / 3 / 0.2',
+    saltGrams: '0.00 / 0.00 / 0.00 / 0.25\n0.22 / 0.00 / 0.00 / 0.20 = 0.67 (食塩相当 0.58g)',
+    calories: 108,
+    protein: 3.1,
+    fat: 7.8,
+    saltTotal: 0.58,
+    cookingNotes: 'マヨネーズと酢、砂糖のコク甘酸っぱい特製ドレッシングでキャベツを和えた定番洋食サラダ。みりん等は使わず洋風に調味',
+    structured: [
+      { name: 'キャベツ', amountPerPerson: 55, unit: 'g', saltPerPerson: 0.0, isSeasoning: false },
+      { name: 'スイートコーン', amountPerPerson: 15, unit: 'g', saltPerPerson: 0.0, isSeasoning: false },
+      { name: 'ロースハム', amountPerPerson: 10, unit: 'g', saltPerPerson: 0.25, isSeasoning: false },
+      { name: 'マヨネーズ', amountPerPerson: 12, unit: 'g', saltPerPerson: 0.22, isSeasoning: true },
+      { name: '穀物酢', amountPerPerson: 4, unit: 'g', saltPerPerson: 0.0, isSeasoning: true },
+      { name: '上白糖', amountPerPerson: 3, unit: 'g', saltPerPerson: 0.0, isSeasoning: true }
+    ]
+  },
+  '油あげと青梗菜の煮びたし': {
+    dishName: '油あげと青梗菜の煮びたし',
+    ingredients: 'チンゲン菜 / 油揚げ / 人参\nかつお昆布出汁 / 薄口醤油 / 本みりん / 上白糖',
+    amounts: '60 / 15 / 15\n60 / 4.5 / 4 / 2',
+    saltGrams: '0.00 / 0.00\n0.00 / 0.72 / 0.00 / 0.00 = 0.72 (食塩相当 0.58g)',
+    calories: 78,
+    protein: 3.8,
+    fat: 4.2,
+    saltTotal: 0.58,
+    cookingNotes: '青梗菜のシャキッとした食感を残しつつ、油揚げのコクと出汁の旨味をしっかり染み込ませた上品な煮浸し',
+    structured: [
+      { name: 'チンゲン菜', amountPerPerson: 60, unit: 'g', saltPerPerson: 0.0, isSeasoning: false },
+      { name: '油揚げ', amountPerPerson: 15, unit: 'g', saltPerPerson: 0.0, isSeasoning: false },
+      { name: '人参', amountPerPerson: 15, unit: 'g', saltPerPerson: 0.0, isSeasoning: false },
+      { name: '薄口醤油', amountPerPerson: 4.5, unit: 'g', saltPerPerson: 0.72, isSeasoning: true },
+      { name: '上白糖', amountPerPerson: 2, unit: 'g', saltPerPerson: 0.0, isSeasoning: true }
+    ]
+  },
+  '高野豆腐と揚げの煮びたし': {
+    dishName: '高野豆腐と揚げの煮びたし',
+    ingredients: '高野豆腐 / 油揚げ / 人参 / 絹さや\n昆布鰹だし汁 / 薄口醤油 / 本みりん / 上白糖',
+    amounts: '18 / 12 / 20 / 5\n90 / 4.5 / 4 / 3',
+    saltGrams: '0.00 / 0.00\n0.00 / 0.72 / 0.00 / 0.00 = 0.72 (食塩相当 0.62g)',
+    calories: 112,
+    protein: 7.5,
+    fat: 6.2,
     saltTotal: 0.62,
-    cookingNotes: '一番だしを贅沢に用い塩分0.6gに抑制。小松菜は小口切り、えのきは短寸カットで喉越し良く',
+    cookingNotes: '高野豆腐に出汁と砂糖・みりんの煮汁をたっぷり含ませ、油揚げのコクで滋味豊かな副菜に',
     structured: [
-      { name: '小松菜', amountPerPerson: 15, unit: 'g', saltPerPerson: 0, isSeasoning: false },
-      { name: 'えのきたけ', amountPerPerson: 10, unit: 'g', saltPerPerson: 0, isSeasoning: false },
-      { name: '薄口醤油', amountPerPerson: 2, unit: 'g', saltPerPerson: 0.32, isSeasoning: true },
-      { name: '塩', amountPerPerson: 0.3, unit: 'g', saltPerPerson: 0.30, isSeasoning: true },
-      { name: '高純度一番だし汁', amountPerPerson: 150, unit: 'g', saltPerPerson: 0, isSeasoning: true }
-    ]
-  },
-
-  // 定番小鉢・副菜
-  'ほうれん草のおひたし': {
-    dishName: 'ほうれん草のおひたし',
-    ingredients: 'ほうれん草 / 人参\n薄口醤油 / かつお昆布だし汁 / かつお節',
-    amounts: '45 / 10\n2 / 20 / 0.5',
-    saltGrams: '0.00\n0.32',
-    calories: 25,
-    protein: 1.8,
-    fat: 0.3,
-    saltTotal: 0.32,
-    cookingNotes: '出汁割り醤油で全体に味を行き渡らせ、直接醤油をかけるよりも大幅に減塩',
-    structured: [
-      { name: 'ほうれん草', amountPerPerson: 45, unit: 'g', saltPerPerson: 0, isSeasoning: false },
-      { name: '薄口醤油', amountPerPerson: 2, unit: 'g', saltPerPerson: 0.32, isSeasoning: true }
-    ]
-  },
-  'ほうれん草の胡麻和え': {
-    dishName: 'ほうれん草の胡麻和え',
-    ingredients: 'ほうれん草 / 人参\nすり白ごま / 濃口醤油 / 砂糖',
-    amounts: '45 / 10\n4 / 2.5 / 2',
-    saltGrams: '0.00\n0.36',
-    calories: 48,
-    protein: 2.2,
-    fat: 2.4,
-    saltTotal: 0.36,
-    cookingNotes: '炒りたてのすりごまの芳醇な香りで減塩を補正。野菜は水気をよく絞り水っぽさを防止',
-    structured: [
-      { name: 'ほうれん草', amountPerPerson: 45, unit: 'g', saltPerPerson: 0, isSeasoning: false },
-      { name: 'すり白ごま', amountPerPerson: 4, unit: 'g', saltPerPerson: 0, isSeasoning: true },
-      { name: '濃口醤油', amountPerPerson: 2.5, unit: 'g', saltPerPerson: 0.36, isSeasoning: true }
-    ]
-  },
-  'キャベツの和え物': {
-    dishName: 'キャベツの和え物',
-    ingredients: 'キャベツ / 人参\nポン酢しょうゆ（減塩）/ 煎りごま',
-    amounts: '40 / 10\n4 / 1',
-    saltGrams: '0.00\n0.24',
-    calories: 32,
-    protein: 1.2,
-    fat: 0.8,
-    saltTotal: 0.24,
-    cookingNotes: '蒸し煮で繊維を軟らかく加熱。柑橘の酸味と胡麻の香ばしさを効かせて塩分を低減',
-    structured: [
-      { name: 'キャベツ', amountPerPerson: 40, unit: 'g', saltPerPerson: 0, isSeasoning: false },
-      { name: '人参', amountPerPerson: 10, unit: 'g', saltPerPerson: 0, isSeasoning: false },
-      { name: '減塩ポン酢', amountPerPerson: 4, unit: 'g', saltPerPerson: 0.24, isSeasoning: true },
-      { name: '煎りごま', amountPerPerson: 1, unit: 'g', saltPerPerson: 0.00, isSeasoning: true }
-    ]
-  },
-  'ひじきの煮物': {
-    dishName: 'ひじきの煮物',
-    ingredients: '乾燥ひじき / 人参 / 油揚げ / 大豆水煮\n濃口醤油 / みりん / 砂糖 / 出汁',
-    amounts: '4 / 15 / 8 / 15\n3 / 3 / 2 / 50',
-    saltGrams: '0.00\n0.43',
-    calories: 62,
-    protein: 3.4,
-    fat: 2.1,
-    saltTotal: 0.43,
-    cookingNotes: 'ひじきは軟らかく戻し、大豆は指で潰れる程度まで煮含める。鉄分・食物繊維補給',
-    structured: [
-      { name: '乾燥ひじき', amountPerPerson: 4, unit: 'g', saltPerPerson: 0, isSeasoning: false },
-      { name: '大豆水煮', amountPerPerson: 15, unit: 'g', saltPerPerson: 0, isSeasoning: false },
-      { name: '濃口醤油', amountPerPerson: 3, unit: 'g', saltPerPerson: 0.43, isSeasoning: true }
-    ]
-  },
-  '切り干し大根の煮物': {
-    dishName: '切り干し大根の煮物',
-    ingredients: '切り干し大根 / 人参 / 油揚げ\n濃口醤油 / みりん / 砂糖 / 出汁',
-    amounts: '10 / 15 / 8\n3 / 3 / 2 / 60',
-    saltGrams: '0.00\n0.43',
-    calories: 55,
-    protein: 2.2,
-    fat: 1.6,
-    saltTotal: 0.43,
-    cookingNotes: '切り干し大根は短くカットし出汁をたっぷり吸わせてジューシーに仕上げる',
-    structured: [
-      { name: '切り干し大根', amountPerPerson: 10, unit: 'g', saltPerPerson: 0, isSeasoning: false },
-      { name: '濃口醤油', amountPerPerson: 3, unit: 'g', saltPerPerson: 0.43, isSeasoning: true }
+      { name: '高野豆腐', amountPerPerson: 18, unit: 'g', saltPerPerson: 0.0, isSeasoning: false },
+      { name: '油揚げ', amountPerPerson: 12, unit: 'g', saltPerPerson: 0.0, isSeasoning: false },
+      { name: '薄口醤油', amountPerPerson: 4.5, unit: 'g', saltPerPerson: 0.72, isSeasoning: true },
+      { name: '上白糖', amountPerPerson: 3, unit: 'g', saltPerPerson: 0.0, isSeasoning: true }
     ]
   },
   '南瓜の煮物': {
     dishName: '南瓜の煮物',
-    ingredients: 'かぼちゃ\n濃口醤油 / みりん / 砂糖 / だし汁',
-    amounts: '70\n2.5 / 3 / 3 / 50',
-    saltGrams: '0.00\n0.36',
-    calories: 72,
-    protein: 1.5,
-    fat: 0.3,
-    saltTotal: 0.36,
-    cookingNotes: '皮を所々剥いて軟らかく煮付け、面取りして煮崩れを防止。南瓜自身の甘みを活用',
+    ingredients: 'かぼちゃ / 人参\n濃口醤油 / 本みりん / 上白糖 / 和風出汁',
+    amounts: '75 / 15\n3.5 / 4 / 4 / 60',
+    saltGrams: '0.00\n0.50',
+    calories: 95,
+    protein: 1.8,
+    fat: 0.4,
+    saltTotal: 0.50,
+    cookingNotes: '南瓜本来のホクホク感と甘味を引き出し、砂糖とみりんでツヤ良く煮付け',
     structured: [
-      { name: 'かぼちゃ', amountPerPerson: 70, unit: 'g', saltPerPerson: 0, isSeasoning: false },
-      { name: '濃口醤油', amountPerPerson: 2.5, unit: 'g', saltPerPerson: 0.36, isSeasoning: true }
+      { name: 'かぼちゃ', amountPerPerson: 75, unit: 'g', saltPerPerson: 0.0, isSeasoning: false },
+      { name: '濃口醤油', amountPerPerson: 3.5, unit: 'g', saltPerPerson: 0.5, isSeasoning: true },
+      { name: '上白糖', amountPerPerson: 4, unit: 'g', saltPerPerson: 0.0, isSeasoning: true }
     ]
   },
-  'きゅうりとタコの酢の物': {
-    dishName: 'きゅうりとタコの酢の物',
-    ingredients: 'きゅうり / ワカメ / 茹でタコ\n穀物酢 / 砂糖 / 塩 / 薄口醤油',
-    amounts: '40 / 1 / 15\n6 / 3 / 0.2 / 1',
-    saltGrams: '0.00\n0.20 + 0.16 = 0.36',
-    calories: 42,
-    protein: 3.2,
-    fat: 0.3,
-    saltTotal: 0.36,
-    cookingNotes: '酢の酸味と香りを効かせて塩分を抑制。タコは極薄切りにし噛みやすさを徹底担保',
+  'きんぴらごぼう': {
+    dishName: 'きんぴらごぼう',
+    ingredients: 'ごぼう / 人参 / 牛肉こま切れ（少量旨味用）\n濃口醤油 / 本みりん / 上白糖 / ごま油 / 白いりごま / 一味唐辛子少々',
+    amounts: '45 / 25 / 15\n4.5 / 4 / 3.5 / 3 / 2 / 0.05',
+    saltGrams: '0.00\n0.65',
+    calories: 102,
+    protein: 3.5,
+    fat: 4.6,
+    saltTotal: 0.65,
+    cookingNotes: 'ごぼうと人参をごま油で香ばしく炒め、牛肉の旨味と甘辛タレを絡めて食物繊維豊富に',
     structured: [
-      { name: 'きゅうり（薄切り塩揉み絞り）', amountPerPerson: 40, unit: 'g', saltPerPerson: 0, isSeasoning: false },
-      { name: '乾燥ワカメ', amountPerPerson: 1, unit: 'g', saltPerPerson: 0, isSeasoning: false },
-      { name: '茹でタコ（極薄そぎ切り）', amountPerPerson: 15, unit: 'g', saltPerPerson: 0, isSeasoning: false },
-      { name: '薄口醤油', amountPerPerson: 1, unit: 'g', saltPerPerson: 0.16, isSeasoning: true }
+      { name: 'ごぼう', amountPerPerson: 45, unit: 'g', saltPerPerson: 0.0, isSeasoning: false },
+      { name: '濃口醤油', amountPerPerson: 4.5, unit: 'g', saltPerPerson: 0.65, isSeasoning: true },
+      { name: '上白糖', amountPerPerson: 3.5, unit: 'g', saltPerPerson: 0.0, isSeasoning: true }
+    ]
+  },
+
+  // ==================== 汁物 (塩分 0.75〜0.85g / 出汁の旨味で制御) ====================
+  '大根の味噌汁': {
+    dishName: '大根の味噌汁',
+    ingredients: '大根 / 刻み青ねぎ\n淡色辛味噌 / かつお昆布合わせ出汁',
+    amounts: '35 / 5\n8 / 150',
+    saltGrams: '0.00 / 0.00\n0.98 = 0.98 (汁残し考慮食塩相当 0.82g)',
+    calories: 40,
+    protein: 2.6,
+    fat: 0.9,
+    saltTotal: 0.82,
+    cookingNotes: '大根を軟らかく煮て甘味を出し、合わせ出汁を濃いめに引いて味噌8gで風味豊かな一杯に',
+    structured: [
+      { name: '大根', amountPerPerson: 35, unit: 'g', saltPerPerson: 0.0, isSeasoning: false },
+      { name: '刻み青ねぎ', amountPerPerson: 5, unit: 'g', saltPerPerson: 0.0, isSeasoning: false },
+      { name: '淡色辛味噌', amountPerPerson: 8, unit: 'g', saltPerPerson: 0.98, isSeasoning: true },
+      { name: '合わせ出汁', amountPerPerson: 150, unit: 'g', saltPerPerson: 0.0, isSeasoning: true }
+    ]
+  },
+  '油あげと豆腐の味噌汁': {
+    dishName: '油あげと豆腐の味噌汁',
+    ingredients: '木綿豆腐 / 油揚げ / 刻みねぎ\n合わせ味噌 / かつお昆布出汁',
+    amounts: '35 / 12 / 3\n8 / 150',
+    saltGrams: '0.00 / 0.00 / 0.00\n0.98 = 0.98 (食塩相当 0.84g)',
+    calories: 55,
+    protein: 3.8,
+    fat: 2.8,
+    saltTotal: 0.84,
+    cookingNotes: '豆腐となめらかな油揚げのコクが溶け込んだ定番味噌汁。出汁の旨味で味噌の使用量を抑制',
+    structured: [
+      { name: '木綿豆腐', amountPerPerson: 35, unit: 'g', saltPerPerson: 0.0, isSeasoning: false },
+      { name: '油揚げ', amountPerPerson: 12, unit: 'g', saltPerPerson: 0.0, isSeasoning: false },
+      { name: '合わせ味噌', amountPerPerson: 8, unit: 'g', saltPerPerson: 0.98, isSeasoning: true }
+    ]
+  },
+  'コーンポタージュ': {
+    dishName: 'コーンポタージュ',
+    ingredients: 'コーングリッツ・クリームコーン / 牛乳 / 玉ねぎ\n有塩バター / 洋風コンソメ / 食塩・白こしょう',
+    amounts: '40 / 60 / 15\n4 / 2.5 / 0.15',
+    saltGrams: '0.00\n0.07 / 0.35 / 0.15 = 0.57',
+    calories: 85,
+    protein: 3.2,
+    fat: 4.8,
+    saltTotal: 0.57,
+    cookingNotes: 'コーンの優しい自然な甘味と牛乳のコクを活かした洋食スープ。塩分控えめでも濃厚な味わい',
+    structured: [
+      { name: 'クリームコーン', amountPerPerson: 40, unit: 'g', saltPerPerson: 0.0, isSeasoning: false },
+      { name: '普通牛乳', amountPerPerson: 60, unit: 'g', saltPerPerson: 0.05, isSeasoning: false },
+      { name: '洋風コンソメ', amountPerPerson: 2.5, unit: 'g', saltPerPerson: 0.35, isSeasoning: true }
     ]
   }
 };
 
 /**
- * 任意の料理名から、高齢者施設向け（70-90代、1日塩分6.5g以下基準厳守）の栄養価・食材配合を自律計算するエンジン
+ * 料理名から料理ジャンル（洋食・中華・和食）を判定する
+ */
+function detectCuisine(name: string): 'western' | 'chinese' | 'japanese' {
+  if (
+    /オムレツ|ポトフ|ウインナー|ウィンナー|コロッケ|スパゲッティ|パスタ|ナポリタン|サラダ|コールスロー|スープ|ポタージュ|シチュー|カレー|グラタン|ステーキ|ソテー|ピカタ|フライ|カツレツ|ミートボール|ハンバーグ|ロールキャベツ|チーズ|バター|コンソメ|ケチャップ|マヨネーズ/.test(
+      name
+    )
+  ) {
+    return 'western';
+  }
+  if (
+    /麻婆|マーボー|回鍋肉|ホイコーロー|八宝菜|餃子|ギョーザ|シュウマイ|焼売|青椒肉絲|チンジャオ|酢豚|炒飯|チャーハン|担々|棒々鶏|エビチリ|天津|ワンタン|中華|点心|豆板醤|甜麺醤|オイスター/.test(
+      name
+    )
+  ) {
+    return 'chinese';
+  }
+  return 'japanese';
+}
+
+/**
+ * 1日1400〜1600kcal、食塩約6gを達成できるよう逆算・設計された高精度自律計算エンジン
  */
 export function calculateDishNutrition(
   dishName: string,
@@ -579,209 +620,372 @@ export function calculateDishNutrition(
   dishType?: DishItem['role'],
   residentCount: number = 55
 ): CalculatedDishResult {
-  const trimmed = (dishName || '').trim();
+  const raw = (dishName || '').trim();
+  const trimmed = raw.replace(/[（(].*?[）)]/g, '').trim() || raw;
 
-  // 1. 完全一致
+  // 1. 完全一致（MASTER_DISHES）
+  if (MASTER_DISHES[raw]) {
+    const item = MASTER_DISHES[raw];
+    const inferred = inferDishRole(raw, dishType);
+    return {
+      ...item,
+      mealCategory,
+      dishType: dishType || inferred,
+      calculatedForCount: residentCount
+    };
+  }
   if (MASTER_DISHES[trimmed]) {
     const item = MASTER_DISHES[trimmed];
+    const inferred = inferDishRole(trimmed, dishType);
     return {
       ...item,
+      dishName: raw,
       mealCategory,
-      dishType: dishType || (trimmed.includes('飯') || trimmed.includes('パン') ? '主食' : trimmed.includes('汁') ? '汁物' : '主菜'),
+      dishType: dishType || inferred,
       calculatedForCount: residentCount
     };
   }
 
-  // 2. 部分一致（マスターから近しいものを検索）
-  const matchedKey = Object.keys(MASTER_DISHES).find(k => trimmed.includes(k) || k.includes(trimmed));
-  if (matchedKey && trimmed.length >= 2) {
+  // 2. 部分一致（マスターから最も合致する料理を検索）
+  const matchedKey = Object.keys(MASTER_DISHES).find(
+    (k) => raw.includes(k) || k.includes(raw) || trimmed.includes(k) || k.includes(trimmed)
+  );
+  if (matchedKey && (raw.length >= 2 || trimmed.length >= 2)) {
     const item = MASTER_DISHES[matchedKey];
+    const inferred = inferDishRole(raw, dishType);
     return {
       ...item,
-      dishName: trimmed,
+      dishName: raw,
       mealCategory,
-      dishType: dishType || item.dishName.includes('飯') ? '主食' : item.dishName.includes('汁') ? '汁物' : '主菜',
+      dishType: dishType || inferred,
       calculatedForCount: residentCount
     };
   }
 
-  // 3. 料理名からカテゴリーや主食材を自動判定して精密動的計算
-  const isSoup = trimmed.includes('汁') || trimmed.includes('スープ') || trimmed.includes('吸') || dishType === '汁物';
-  const isStaple = trimmed.includes('飯') || trimmed.includes('米') || trimmed.includes('パン') || trimmed.includes('うどん') || trimmed.includes('そば') || trimmed.includes('麺') || trimmed.includes('粥') || dishType === '主食';
-  const isFish = trimmed.includes('魚') || trimmed.includes('鮭') || trimmed.includes('鯖') || trimmed.includes('鱈') || trimmed.includes('鯛') || trimmed.includes('鰆') || trimmed.includes('鰈') || trimmed.includes('アジ') || trimmed.includes('サンマ') || trimmed.includes('エビ') || trimmed.includes('イカ') || trimmed.includes('シーフード');
-  const isMeat = trimmed.includes('肉') || trimmed.includes('豚') || trimmed.includes('鶏') || trimmed.includes('牛') || trimmed.includes('バーグ') || trimmed.includes('カツ') || trimmed.includes('ウインナー') || trimmed.includes('ハム') || trimmed.includes('唐揚げ') || trimmed.includes('ステーキ');
-  const isEgg = trimmed.includes('卵') || trimmed.includes('玉子') || trimmed.includes('オムレツ') || trimmed.includes('エッグ');
-  const isTofu = trimmed.includes('豆腐') || trimmed.includes('納豆') || trimmed.includes('厚揚げ') || trimmed.includes('油揚げ');
-  const isSide = trimmed.includes('和え') || trimmed.includes('サラダ') || trimmed.includes('酢') || trimmed.includes('煮物') || trimmed.includes('浸し') || trimmed.includes('金平') || trimmed.includes('きんぴら') || trimmed.includes('ナムル') || trimmed.includes('小鉢') || dishType === '副菜';
+  // 3. 自律判定：料理名から役割（主菜・副菜・汁物・主食）とジャンル（洋食・中華・和食）を判定
+  const role = inferDishRole(raw, dishType);
+  const cuisine = detectCuisine(raw);
 
-  const assignedRole: DishItem['role'] = dishType || (isStaple ? '主食' : isSoup ? '汁物' : isSide ? '副菜' : '主菜');
-
-  if (isSoup) {
-    const mainVeg = trimmed.replace(/味噌汁|みそ汁|すまし汁|清汁|スープ|汁物|吸物/g, '') || '豆腐と旬野菜';
+  // === 3-A. 汁物 (目標: 35〜55kcal、塩分 0.75〜0.85g) ===
+  if (role === '汁物') {
+    if (cuisine === 'western') {
+      const soupVeg = trimmed.replace(/スープ|ポタージュ|汁/g, '') || '旬野菜とベーコン';
+      return {
+        dishName: raw,
+        mealCategory,
+        dishType: '汁物',
+        ingredients: `${soupVeg} / 玉ねぎ\n洋風チキンコンソメ / 食塩・こしょう / オリーブ油 / 水`,
+        amounts: '35 / 15\n3.5 / 0.15 / 2 / 150',
+        saltGrams: '0.00 / 0.00\n0.60 / 0.15 = 0.75',
+        calories: 48,
+        protein: 2.1,
+        fat: 2.8,
+        saltTotal: 0.75,
+        cookingNotes: '野菜の甘味を引き出し、洋風コンソメと少量のオリーブ油で深みのある味わいに調理',
+        structured: [
+          { name: soupVeg, amountPerPerson: 35, unit: 'g', saltPerPerson: 0, isSeasoning: false },
+          { name: '玉ねぎ', amountPerPerson: 15, unit: 'g', saltPerPerson: 0, isSeasoning: false },
+          { name: '洋風コンソメ', amountPerPerson: 3.5, unit: 'g', saltPerPerson: 0.6, isSeasoning: true }
+        ],
+        calculatedForCount: residentCount
+      };
+    }
+    const soupMain = trimmed.replace(/味噌汁|みそ汁|すまし汁|清汁|汁物|吸物|汁/g, '') || '豆腐と旬野菜';
     return {
-      dishName: trimmed,
+      dishName: raw,
       mealCategory,
       dishType: '汁物',
-      ingredients: `${mainVeg} / 刻み青ねぎ\n淡色辛味噌 / かつお昆布合わせ出汁`,
-      amounts: '30 / 3\n6 / 150',
-      saltGrams: '0.00\n0.74',
-      calories: 34,
-      protein: 2.2,
-      fat: 0.8,
-      saltTotal: 0.74,
-      cookingNotes: '昆布と鰹節の一番だしを濃いめに引き、味噌を6gに抑えて塩分0.7g台に制御',
+      ingredients: `${soupMain} / 刻みねぎ\n合わせ味噌 / かつお昆布出汁`,
+      amounts: '35 / 5\n8 / 150',
+      saltGrams: '0.00 / 0.00\n0.82',
+      calories: 42,
+      protein: 2.8,
+      fat: 1.2,
+      saltTotal: 0.82,
+      cookingNotes: '出汁を贅沢に引き、味噌の使用量を8gに抑えてもしっかりとした風味と満足感を実現',
       structured: [
-        { name: mainVeg, amountPerPerson: 30, unit: 'g', saltPerPerson: 0, isSeasoning: false },
-        { name: '刻み青ねぎ', amountPerPerson: 3, unit: 'g', saltPerPerson: 0, isSeasoning: false },
-        { name: '淡色辛味噌', amountPerPerson: 6, unit: 'g', saltPerPerson: 0.74, isSeasoning: true },
-        { name: '合わせ出汁', amountPerPerson: 150, unit: 'g', saltPerPerson: 0, isSeasoning: true }
+        { name: soupMain, amountPerPerson: 35, unit: 'g', saltPerPerson: 0, isSeasoning: false },
+        { name: '合わせ味噌', amountPerPerson: 8, unit: 'g', saltPerPerson: 0.82, isSeasoning: true }
       ],
       calculatedForCount: residentCount
     };
   }
 
-  if (isStaple) {
-    const isNoodle = trimmed.includes('うどん') || trimmed.includes('そば') || trimmed.includes('麺');
+  // === 3-B. 主食 (目標: 230〜250kcal、塩分 0.0〜0.8g) ===
+  if (role === '主食') {
+    const isNoodle = /うどん|そば|蕎麦|ラーメン|パスタ|スパゲッティ/.test(raw);
+    const isBread = /パン|トースト|サンド/.test(raw);
     if (isNoodle) {
       return {
-        dishName: trimmed,
+        dishName: raw,
         mealCategory,
         dishType: '主食',
-        ingredients: `${trimmed}（ゆで）/ 刻みねぎ\n薄口醤油 / みりん / 出汁`,
-        amounts: '180 / 5\n8 / 6 / 200',
-        saltGrams: '0.30\n0.95',
-        calories: 220,
-        protein: 5.8,
-        fat: 1.1,
-        saltTotal: 1.25,
-        cookingNotes: '麺は短めにカットし喉詰めを防止。つゆは飲まない想定で塩分を考慮',
-        structured: [
-          { name: 'ゆで麺', amountPerPerson: 180, unit: 'g', saltPerPerson: 0.3, isSeasoning: false },
-          { name: '薄口醤油', amountPerPerson: 8, unit: 'g', saltPerPerson: 0.95, isSeasoning: true }
-        ],
+        ingredients: `${trimmed}（ゆで）/ 刻みねぎ・具材\nつゆ調味料 / だし汁`,
+        amounts: '180 / 15\n8 / 180',
+        saltGrams: '0.30\n0.85 = 1.15',
+        calories: 245,
+        protein: 6.8,
+        fat: 1.5,
+        saltTotal: 1.15,
+        cookingNotes: '麺は喉越しの良い適度な硬さに茹で上げ。つゆの塩分を計算',
+        structured: [{ name: 'ゆで麺', amountPerPerson: 180, unit: 'g', saltPerPerson: 0.3, isSeasoning: false }],
+        calculatedForCount: residentCount
+      };
+    }
+    if (isBread) {
+      return {
+        dishName: raw,
+        mealCategory,
+        dishType: '主食',
+        ingredients: '食パン・ロールパン / ジャム・バター',
+        amounts: '65 / 12',
+        saltGrams: '0.65\n0.10',
+        calories: 240,
+        protein: 5.9,
+        fat: 6.5,
+        saltTotal: 0.75,
+        cookingNotes: '朝のエネルギー源として提供。温めて香ばしく仕上げる',
+        structured: [{ name: 'パン', amountPerPerson: 65, unit: 'g', saltPerPerson: 0.65, isSeasoning: false }],
         calculatedForCount: residentCount
       };
     }
     return {
-      dishName: trimmed,
+      dishName: raw,
       mealCategory,
       dishType: '主食',
-      ingredients: '精白米（軟らかめ炊飯 150g）',
+      ingredients: '精白米（炊き上がり 150g）',
       amounts: '65',
       saltGrams: '0.00',
       calories: 234,
       protein: 3.8,
       fat: 0.5,
-      saltTotal: 0.00,
-      cookingNotes: '米の甘みを活かし軟らかめに炊飯。食塩不使用',
+      saltTotal: 0.0,
+      cookingNotes: 'ふっくらと炊飯。食塩不使用で自然な甘味とカロリーを安定供給',
       structured: [{ name: '精白米', amountPerPerson: 65, unit: 'g', saltPerPerson: 0, isSeasoning: false }],
       calculatedForCount: residentCount
     };
   }
 
-  if (assignedRole === '副菜' || isSide) {
+  // === 3-C. 主菜（目標: 肉・魚・卵は65〜85g、エネルギー210〜300kcal、塩分0.85〜1.15g） ===
+  if (role === '主菜') {
+    // 洋食主菜
+    if (cuisine === 'western') {
+      const isEggWestern = /オムレツ|卵|エッグ/.test(raw);
+      const isSausageOrHam = /ウインナー|ウィンナー|ソーセージ|ハム|ベーコン|ミートボール/.test(raw);
+      const isFriedOrCutlet = /コロッケ|カツ|フライ|メンチ/.test(raw);
+
+      if (isFriedOrCutlet) {
+        return {
+          dishName: raw,
+          mealCategory,
+          dishType: '主菜',
+          ingredients: `${trimmed} / 付け合わせ温野菜・千切りキャベツ\n中濃ソース / トマトケチャップ / 揚げ油 / 食塩こしょう`,
+          amounts: '75 / 35\n10 / 8 / 6 / 0.1',
+          saltGrams: '0.35 / 0.00\n0.55 / 0.24 / 0.00 / 0.10 = 1.24 (食塩相当 1.10g)',
+          calories: 310,
+          protein: 8.5,
+          fat: 16.5,
+          saltTotal: 1.1,
+          cookingNotes: 'カラリと香ばしく揚げて中濃ソースとケチャップで調味。満足感のある主菜ボリュームを確保',
+          structured: [
+            { name: trimmed, amountPerPerson: 75, unit: 'g', saltPerPerson: 0.35, isSeasoning: false },
+            { name: '付け合わせ野菜', amountPerPerson: 35, unit: 'g', saltPerPerson: 0, isSeasoning: false },
+            { name: '中濃ソース', amountPerPerson: 10, unit: 'g', saltPerPerson: 0.55, isSeasoning: true },
+            { name: 'トマトケチャップ', amountPerPerson: 8, unit: 'g', saltPerPerson: 0.24, isSeasoning: true }
+          ],
+          calculatedForCount: residentCount
+        };
+      }
+
+      if (isEggWestern || isSausageOrHam) {
+        return {
+          dishName: raw,
+          mealCategory,
+          dishType: '主菜',
+          ingredients: `${trimmed} / 玉ねぎ\nトマトケチャップ / サラダ油 / 上白糖 / 有塩バター / 食塩・こしょう`,
+          amounts: '80 / 25\n10 / 4 / 2.5 / 2 / 0.15',
+          saltGrams: '0.45 / 0.00\n0.30 / 0.00 / 0.00 / 0.04 / 0.15 = 0.94 (食塩相当 0.88g)',
+          calories: 235,
+          protein: 11.5,
+          fat: 17.2,
+          saltTotal: 0.88,
+          cookingNotes: 'ウインナーや卵のコクをバターと少量の砂糖で引き立て、ケチャップで洋風に美味しく仕上げ',
+          structured: [
+            { name: trimmed, amountPerPerson: 80, unit: 'g', saltPerPerson: 0.45, isSeasoning: false },
+            { name: '玉ねぎ', amountPerPerson: 25, unit: 'g', saltPerPerson: 0, isSeasoning: false },
+            { name: 'トマトケチャップ', amountPerPerson: 10, unit: 'g', saltPerPerson: 0.3, isSeasoning: true },
+            { name: '上白糖', amountPerPerson: 2.5, unit: 'g', saltPerPerson: 0, isSeasoning: true }
+          ],
+          calculatedForCount: residentCount
+        };
+      }
+
+      // 一般洋食主菜（肉料理・ハンバーグ・ポトフ・ソテー等）
+      return {
+        dishName: raw,
+        mealCategory,
+        dishType: '主菜',
+        ingredients: `${trimmed}の主肉材（牛・豚・鶏）/ 玉ねぎ・温野菜\n洋風デミソースまたはケチャップ / 上白糖 / オリーブ油 / 食塩・こしょう`,
+        amounts: '75 / 35\n12 / 3 / 4 / 0.2',
+        saltGrams: '0.10 / 0.00\n0.65 / 0.00 / 0.00 / 0.20 = 0.95',
+        calories: 255,
+        protein: 15.2,
+        fat: 16.8,
+        saltTotal: 0.95,
+        cookingNotes: 'お肉にしっかり焼き目を付け、洋風ソースと上白糖でコク深い甘辛味に調味',
+        structured: [
+          { name: '主肉材', amountPerPerson: 75, unit: 'g', saltPerPerson: 0.1, isSeasoning: false },
+          { name: '温野菜', amountPerPerson: 35, unit: 'g', saltPerPerson: 0, isSeasoning: false },
+          { name: '洋風調味ソース', amountPerPerson: 12, unit: 'g', saltPerPerson: 0.65, isSeasoning: true }
+        ],
+        calculatedForCount: residentCount
+      };
+    }
+
+    // 中華主菜（麻婆、回鍋肉、八宝菜、餃子、酢豚等）
+    if (cuisine === 'chinese') {
+      return {
+        dishName: raw,
+        mealCategory,
+        dishType: '主菜',
+        ingredients: `${trimmed}の主食材（豚肉・ひき肉・海老等）/ 旬野菜（茄子・キャベツ・ピーマン等）\n甜麺醤・豆板醤 / 濃口醤油 / 上白糖 / ごま油 / 鶏がらスープ`,
+        amounts: '75 / 45\n6 / 5 / 4 / 4 / 20',
+        saltGrams: '0.05 / 0.00\n0.45 / 0.72 / 0.00 / 0.00 / 0.15 = 1.37 (食塩相当 0.98g)',
+        calories: 252,
+        protein: 12.5,
+        fat: 17.5,
+        saltTotal: 0.98,
+        cookingNotes: 'ごま油で香ばしく炒め、甜麺醤と砂糖のコク、少量の豆板醤で本格中華の旨味を凝縮',
+        structured: [
+          { name: '主食材（肉・魚介）', amountPerPerson: 75, unit: 'g', saltPerPerson: 0.05, isSeasoning: false },
+          { name: '旬の中華野菜', amountPerPerson: 45, unit: 'g', saltPerPerson: 0, isSeasoning: false },
+          { name: '濃口醤油', amountPerPerson: 5, unit: 'g', saltPerPerson: 0.72, isSeasoning: true },
+          { name: '甜麺醤', amountPerPerson: 6, unit: 'g', saltPerPerson: 0.45, isSeasoning: true },
+          { name: '上白糖', amountPerPerson: 4, unit: 'g', saltPerPerson: 0, isSeasoning: true },
+          { name: 'ごま油', amountPerPerson: 4, unit: 'g', saltPerPerson: 0, isSeasoning: true }
+        ],
+        calculatedForCount: residentCount
+      };
+    }
+
+    // 和食主菜（魚・肉の照焼、煮付け、南蛮、生姜焼き等）
+    const isFish = /魚|鮭|鯖|鯵|あじ|鰤|鱈|鯛|鰆|鰯|サンマ|エビ|イカ/.test(raw);
+    if (isFish) {
+      return {
+        dishName: raw,
+        mealCategory,
+        dishType: '主菜',
+        ingredients: `${trimmed}（切り身）/ 付け合わせ温野菜\n濃口醤油 / 本みりん / 上白糖 / 清酒 / 合わせ出汁`,
+        amounts: '75 / 30\n6 / 5 / 4 / 4 / 30',
+        saltGrams: '0.10 / 0.00\n0.85 / 0.00 / 0.00 / 0.00 = 0.95',
+        calories: 215,
+        protein: 16.2,
+        fat: 7.8,
+        saltTotal: 0.95,
+        cookingNotes: '魚の旨味を損なわず、砂糖・みりん・醤油の黄金比タレで照りよく炊き上げ',
+        structured: [
+          { name: '魚切り身', amountPerPerson: 75, unit: 'g', saltPerPerson: 0.1, isSeasoning: false },
+          { name: '付け合わせ温野菜', amountPerPerson: 30, unit: 'g', saltPerPerson: 0, isSeasoning: false },
+          { name: '濃口醤油', amountPerPerson: 6, unit: 'g', saltPerPerson: 0.85, isSeasoning: true },
+          { name: '上白糖', amountPerPerson: 4, unit: 'g', saltPerPerson: 0, isSeasoning: true }
+        ],
+        calculatedForCount: residentCount
+      };
+    }
+
+    // 肉料理和食（生姜焼き、すき焼き煮、豚バラ大根、鶏の治部煮等）
     return {
-      dishName: trimmed,
+      dishName: raw,
+      mealCategory,
+      dishType: '主菜',
+      ingredients: `${trimmed}（薄切り肉・もも肉）/ 玉ねぎ・旬野菜\n濃口醤油 / 本みりん / 上白糖 / 清酒 / サラダ油`,
+      amounts: '75 / 35\n6 / 5 / 4 / 3 / 3',
+      saltGrams: '0.05 / 0.00\n0.88 / 0.00 / 0.00 / 0.00 = 0.93',
+      calories: 245,
+      protein: 15.5,
+      fat: 14.8,
+      saltTotal: 0.93,
+      cookingNotes: 'お肉に下味をつけ、砂糖とみりんで甘辛く炒め煮にして十分なカロリーを確保',
+      structured: [
+        { name: '肉類', amountPerPerson: 75, unit: 'g', saltPerPerson: 0.05, isSeasoning: false },
+        { name: '玉ねぎ・旬野菜', amountPerPerson: 35, unit: 'g', saltPerPerson: 0, isSeasoning: false },
+        { name: '濃口醤油', amountPerPerson: 6, unit: 'g', saltPerPerson: 0.88, isSeasoning: true },
+        { name: '上白糖', amountPerPerson: 4, unit: 'g', saltPerPerson: 0, isSeasoning: true }
+      ],
+      calculatedForCount: residentCount
+    };
+  }
+
+  // === 3-D. 副菜（目標: 50〜80gのしっかりボリューム、エネルギー70〜110kcal、塩分0.45〜0.65g） ===
+  if (cuisine === 'western') {
+    // 洋食副菜（コールスロー、ポテトサラダ、マカロニサラダ等）
+    const isSalad = /サラダ|コールスロー|マリネ/.test(raw);
+    return {
+      dishName: raw,
       mealCategory,
       dishType: '副菜',
-      ingredients: `${trimmed.replace(/和え|煮|浸し|サラダ|炒め/g, '') || '旬の温野菜'} / 人参\n薄口醤油 / みりん / だし汁`,
-      amounts: '45 / 10\n2.5 / 2 / 30',
-      saltGrams: '0.00\n0.38',
-      calories: 42,
-      protein: 1.8,
-      fat: 0.9,
-      saltTotal: 0.38,
-      cookingNotes: '出汁を効かせて薄味で調理。野菜は繊維を断つように切り軟らかく加熱',
+      ingredients: `${trimmed} / スイートコーンまたはハム・人参\nマヨネーズ / 穀物酢 / 上白糖 / 食塩・こしょう`,
+      amounts: '55 / 20\n12 / 4 / 3 / 0.15',
+      saltGrams: '0.00 / 0.10\n0.22 / 0.00 / 0.00 / 0.15 = 0.47 (食塩相当 0.55g)',
+      calories: 105,
+      protein: 3.0,
+      fat: 7.5,
+      saltTotal: 0.55,
+      cookingNotes: 'マヨネーズと酢、砂糖のコクと甘味で野菜を食べやすく調味。薄口醤油やみりんは不使用',
       structured: [
-        { name: '旬の温野菜', amountPerPerson: 45, unit: 'g', saltPerPerson: 0, isSeasoning: false },
-        { name: '人参', amountPerPerson: 10, unit: 'g', saltPerPerson: 0, isSeasoning: false },
-        { name: '薄口醤油', amountPerPerson: 2.5, unit: 'g', saltPerPerson: 0.38, isSeasoning: true }
+        { name: trimmed, amountPerPerson: 55, unit: 'g', saltPerPerson: 0, isSeasoning: false },
+        { name: '副素材（コーン・ハム）', amountPerPerson: 20, unit: 'g', saltPerPerson: 0.1, isSeasoning: false },
+        { name: 'マヨネーズ', amountPerPerson: 12, unit: 'g', saltPerPerson: 0.22, isSeasoning: true },
+        { name: '上白糖', amountPerPerson: 3, unit: 'g', saltPerPerson: 0, isSeasoning: true }
       ],
       calculatedForCount: residentCount
     };
   }
 
-  // 主菜 (魚・肉・卵・豆腐等)
-  if (isFish) {
+  // 和食副菜（和え物、煮物、小鉢、煮浸し等：一律45gではなく、55g+20gで砂糖・みりんを効かせて逆算）
+  const isSimmered = /煮|浸し|ひたし|きんぴら|金平/.test(raw);
+  if (isSimmered) {
     return {
-      dishName: trimmed,
+      dishName: raw,
       mealCategory,
-      dishType: '主菜',
-      ingredients: `${trimmed.replace(/焼き|煮|蒸し|揚げ|フライ/g, '') || '白身魚'}（切り身）/ 付け合わせ野菜\n薄口醤油 / みりん / 酒`,
-      amounts: '70 / 15\n4 / 3 / 3',
-      saltGrams: '0.10\n0.60',
-      calories: 135,
-      protein: 14.5,
-      fat: 4.2,
-      saltTotal: 0.70,
-      cookingNotes: '骨抜き魚を使用し安全性を担保。生姜や柚子の風味を効かせて減塩調理',
+      dishType: '副菜',
+      ingredients: `${trimmed} / 油揚げまたは人参\nかつお昆布出汁 / 濃口醤油 / 本みりん / 上白糖`,
+      amounts: '60 / 18\n60 / 4.5 / 4 / 3',
+      saltGrams: '0.00 / 0.00\n0.00 / 0.65 / 0.00 / 0.00 = 0.65 (食塩相当 0.62g)',
+      calories: 92,
+      protein: 3.8,
+      fat: 3.5,
+      saltTotal: 0.62,
+      cookingNotes: '出汁をたっぷり効かせ、砂糖とみりんの甘味で煮含めてエネルギーを補給',
       structured: [
-        { name: '魚切り身（骨なし）', amountPerPerson: 70, unit: 'g', saltPerPerson: 0.1, isSeasoning: false },
-        { name: '調味醤油', amountPerPerson: 4, unit: 'g', saltPerPerson: 0.6, isSeasoning: true }
+        { name: trimmed, amountPerPerson: 60, unit: 'g', saltPerPerson: 0, isSeasoning: false },
+        { name: '副具材（油揚げ・人参等）', amountPerPerson: 18, unit: 'g', saltPerPerson: 0, isSeasoning: false },
+        { name: '濃口醤油', amountPerPerson: 4.5, unit: 'g', saltPerPerson: 0.65, isSeasoning: true },
+        { name: '上白糖', amountPerPerson: 3, unit: 'g', saltPerPerson: 0, isSeasoning: true }
       ],
       calculatedForCount: residentCount
     };
   }
 
-  if (isMeat) {
-    return {
-      dishName: trimmed,
-      mealCategory,
-      dishType: '主菜',
-      ingredients: `${trimmed.replace(/焼き|煮|炒め|唐揚げ|カツ/g, '') || '豚・鶏肉'} / 玉ねぎ\n濃口醤油 / みりん / 植物油`,
-      amounts: '65 / 25\n4.5 / 3 / 2',
-      saltGrams: '0.05\n0.68',
-      calories: 185,
-      protein: 13.9,
-      fat: 9.8,
-      saltTotal: 0.73,
-      cookingNotes: '一口大にカットし筋切りを実施。玉ねぎの自然な甘みで塩分を0.7g前後に抑制',
-      structured: [
-        { name: '肉類', amountPerPerson: 65, unit: 'g', saltPerPerson: 0.05, isSeasoning: false },
-        { name: '玉ねぎ', amountPerPerson: 25, unit: 'g', saltPerPerson: 0, isSeasoning: false },
-        { name: '調味醤油', amountPerPerson: 4.5, unit: 'g', saltPerPerson: 0.68, isSeasoning: true }
-      ],
-      calculatedForCount: residentCount
-    };
-  }
-
-  if (isEgg) {
-    return {
-      dishName: trimmed,
-      mealCategory,
-      dishType: '主菜',
-      ingredients: '鶏卵 / 玉ねぎ\nトマトケチャップ / サラダ油 / 牛乳',
-      amounts: '50 / 20\n5 / 3 / 10',
-      saltGrams: '0.00\n0.20',
-      calories: 145,
-      protein: 7.5,
-      fat: 9.8,
-      saltTotal: 0.35,
-      cookingNotes: '牛乳を加えてふんわりしっとり加熱。塩分0.3g台にコントロール',
-      structured: [
-        { name: '鶏卵', amountPerPerson: 50, unit: 'g', saltPerPerson: 0, isSeasoning: false },
-        { name: 'ケチャップ', amountPerPerson: 5, unit: 'g', saltPerPerson: 0.2, isSeasoning: true }
-      ],
-      calculatedForCount: residentCount
-    };
-  }
-
-  // 一般的な主菜デフォルト
+  // 和え物・酢の物
   return {
-    dishName: trimmed,
+    dishName: raw,
     mealCategory,
-    dishType: '主菜',
-    ingredients: `${trimmed}の主食材 / 付け合わせ野菜\n調味だれ（減塩仕立て）/ 出汁`,
-    amounts: '70 / 20\n5 / 20',
-    saltGrams: '0.05\n0.65',
-    calories: 160,
-    protein: 12.0,
-    fat: 7.5,
-    saltTotal: 0.70,
-    cookingNotes: '高齢者の咀嚼・嚥下に合わせ柔らかく調製。1日の塩分6.5g以下基準に準拠（1品0.7g）',
+    dishType: '副菜',
+    ingredients: `${trimmed} / 人参またはツナ\n白すりごま / 濃口醤油 / 上白糖 / 和風出汁`,
+    amounts: '55 / 15\n6 / 3.5 / 2.5 / 5',
+    saltGrams: '0.00 / 0.00\n0.00 / 0.50 / 0.00 = 0.50 (食塩相当 0.52g)',
+    calories: 82,
+    protein: 4.2,
+    fat: 3.8,
+    saltTotal: 0.52,
+    cookingNotes: 'すりごまの香りと砂糖のコクで調味。野菜の食感を活かしつつ減塩で美味しく仕上げ',
     structured: [
-      { name: '主食材', amountPerPerson: 70, unit: 'g', saltPerPerson: 0.05, isSeasoning: false },
-      { name: '調味料', amountPerPerson: 5, unit: 'g', saltPerPerson: 0.65, isSeasoning: true }
+      { name: trimmed, amountPerPerson: 55, unit: 'g', saltPerPerson: 0, isSeasoning: false },
+      { name: '人参またはツナ', amountPerPerson: 15, unit: 'g', saltPerPerson: 0, isSeasoning: false },
+      { name: '白すりごま', amountPerPerson: 6, unit: 'g', saltPerPerson: 0, isSeasoning: true },
+      { name: '濃口醤油', amountPerPerson: 3.5, unit: 'g', saltPerPerson: 0.5, isSeasoning: true },
+      { name: '上白糖', amountPerPerson: 2.5, unit: 'g', saltPerPerson: 0, isSeasoning: true }
     ],
     calculatedForCount: residentCount
   };

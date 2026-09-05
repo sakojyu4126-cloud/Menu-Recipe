@@ -89,7 +89,7 @@ export function createBlankDayMenu(
           },
           {
             id: `b-${Date.now()}-2`,
-            role: '副菜',
+            role: '主菜',
             dishName: '',
             ingredients: '',
             amounts: '',
@@ -128,7 +128,7 @@ export function createBlankDayMenu(
       lunch: {
         id: 'lunch',
         name: '昼食',
-        maxTargetSalt: 2.5,
+        maxTargetSalt: 2.2,
         items: [
           {
             id: `l-${Date.now()}-1`,
@@ -144,7 +144,7 @@ export function createBlankDayMenu(
           },
           {
             id: `l-${Date.now()}-2`,
-            role: '副菜',
+            role: '主菜',
             dishName: '',
             ingredients: '',
             amounts: '',
@@ -187,7 +187,7 @@ export function createBlankDayMenu(
           },
           {
             id: `d-${Date.now()}-2`,
-            role: '副菜',
+            role: '主菜',
             dishName: '',
             ingredients: '',
             amounts: '',
