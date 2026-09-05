@@ -2,6 +2,7 @@ import express from 'express';
 import path from 'path';
 import dotenv from 'dotenv';
 import { GoogleGenAI } from '@google/genai';
+import { calculateDishNutrition } from './src/utils/dishNutritionEngine';
 
 dotenv.config();
 
@@ -326,89 +327,8 @@ app.post('/api/calculate-menu', async (req, res) => {
   }
 
   // Heuristic intelligent fallback when API key is not present or offline
-  const isSoup = trimmed.includes('汁') || trimmed.includes('スープ') || trimmed.includes('吸') || dishType === '汁物';
-  const isFish = trimmed.includes('魚') || trimmed.includes('鮭') || trimmed.includes('鯖') || trimmed.includes('鱈') || trimmed.includes('鯛') || trimmed.includes('アジ');
-  const isMeat = trimmed.includes('肉') || trimmed.includes('豚') || trimmed.includes('鶏') || trimmed.includes('牛') || trimmed.includes('バーグ');
-  const isSalad = trimmed.includes('和え') || trimmed.includes('サラダ') || trimmed.includes('酢') || trimmed.includes('煮物') || trimmed.includes('浸し') || dishType === '副菜';
-
-  let calculated;
-  if (isSoup) {
-    calculated = {
-      ingredients: `${trimmed.replace(/汁|スープ|吸物/g, '') || '旬の野菜'} / 豆腐\n薄口醤油 / 合わせ出汁 / 味噌`,
-      amounts: '20 / 25\n2 / 150 / 5',
-      saltGrams: '0.00\n0.32 + 0.45 = 0.77',
-      calories: 38,
-      protein: 2.5,
-      fat: 0.9,
-      saltTotal: 0.75,
-      cookingNotes: '厚削り鰹と昆布の一番だしを効かせ、塩分濃度0.6%前後にコントロール。具材は一口大で軟らかく煮付け',
-      structured: [
-        { name: '旬の具材', amountPerPerson: 25, unit: 'g', saltPerPerson: 0, isSeasoning: false },
-        { name: '木綿豆腐', amountPerPerson: 25, unit: 'g', saltPerPerson: 0, isSeasoning: false },
-        { name: '味噌・醤油', amountPerPerson: 7, unit: 'g', saltPerPerson: 0.75, isSeasoning: true },
-        { name: '合わせ出汁', amountPerPerson: 150, unit: 'g', saltPerPerson: 0, isSeasoning: true }
-      ]
-    };
-  } else if (isFish) {
-    calculated = {
-      ingredients: `${trimmed}用鮮魚（生切身）/ 生姜\n薄口醤油 / みりん / 酒 / だし汁`,
-      amounts: '70 / 2\n3 / 4 / 3 / 15',
-      saltGrams: '0.00\n0.48',
-      calories: 145,
-      protein: 14.2,
-      fat: 6.8,
-      saltTotal: 0.65,
-      cookingNotes: '骨は丁寧に取り除き、皮目に飾り包丁を入れて軟らかく調理。生姜風味で減塩しつつ魚の旨味を凝縮',
-      structured: [
-        { name: '主材鮮魚切身', amountPerPerson: 70, unit: 'g', saltPerPerson: 0, isSeasoning: false },
-        { name: '生姜', amountPerPerson: 2, unit: 'g', saltPerPerson: 0, isSeasoning: false },
-        { name: '薄口醤油', amountPerPerson: 3, unit: 'g', saltPerPerson: 0.48, isSeasoning: true },
-        { name: 'みりん・酒', amountPerPerson: 7, unit: 'g', saltPerPerson: 0, isSeasoning: true }
-      ]
-    };
-  } else if (isMeat) {
-    calculated = {
-      ingredients: `やわらか薄切り肉 / 玉ねぎ / 人参\n濃口醤油 / みりん / 酒 / 砂糖`,
-      amounts: '60 / 30 / 15\n3.5 / 4 / 3 / 2',
-      saltGrams: '0.00\n0.52',
-      calories: 180,
-      protein: 12.5,
-      fat: 9.8,
-      saltTotal: 0.62,
-      cookingNotes: '肉は筋切りを行い片栗粉で薄くコーティングして保水性を高め、嚥下しやすく調理。調味料は煮詰めて表面に絡めて減塩',
-      structured: [
-        { name: 'やわらか薄切り肉', amountPerPerson: 60, unit: 'g', saltPerPerson: 0, isSeasoning: false },
-        { name: '玉ねぎ', amountPerPerson: 30, unit: 'g', saltPerPerson: 0, isSeasoning: false },
-        { name: '濃口醤油', amountPerPerson: 3.5, unit: 'g', saltPerPerson: 0.52, isSeasoning: true },
-        { name: '調味料（酒・みりん・砂糖）', amountPerPerson: 9, unit: 'g', saltPerPerson: 0, isSeasoning: true }
-      ]
-    };
-  } else {
-    calculated = {
-      ingredients: `${trimmed}の旬野菜 / 椎茸\n薄口醤油 / 出汁 / 煎りごま`,
-      amounts: '55 / 15\n2 / 10 / 1.5',
-      saltGrams: '0.00\n0.32',
-      calories: 52,
-      protein: 1.8,
-      fat: 1.2,
-      saltTotal: 0.35,
-      cookingNotes: '野菜は皮を厚めに剥き繊維を断ち切るカットで消化吸収を促進。胡麻の油分と香ばしさで薄味でも満足感を高める',
-      structured: [
-        { name: '主野菜', amountPerPerson: 55, unit: 'g', saltPerPerson: 0, isSeasoning: false },
-        { name: '椎茸', amountPerPerson: 15, unit: 'g', saltPerPerson: 0, isSeasoning: false },
-        { name: '薄口醤油', amountPerPerson: 2, unit: 'g', saltPerPerson: 0.32, isSeasoning: true },
-        { name: '出汁・胡麻', amountPerPerson: 11.5, unit: 'g', saltPerPerson: 0, isSeasoning: true }
-      ]
-    };
-  }
-
-  res.json({
-    dishName: trimmed,
-    mealCategory,
-    dishType,
-    ...calculated,
-    calculatedForCount: currentResidentCount
-  });
+  const calculated = calculateDishNutrition(trimmed, mealCategory, dishType as any, currentResidentCount);
+  return res.json(calculated);
 });
 
 // API Route: Suggest full day balanced menu for elderly facility

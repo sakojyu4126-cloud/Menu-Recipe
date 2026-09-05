@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Sparkles, Check, Flame, HeartPulse, Scale, ShieldAlert } from 'lucide-react';
 import { DishItem, FacilityInfo } from '../types';
+import { calculateDishNutrition } from '../utils/dishNutritionEngine';
 
 interface Props {
   isOpen: boolean;
@@ -33,63 +34,111 @@ export const DishEditModal: React.FC<Props> = ({
   if (!isOpen || !dish) return null;
 
   const handleAiRecalculate = async () => {
-    if (!formData.dishName?.trim()) return;
+    const targetName = (formData.dishName || '').trim();
+    if (!targetName) return;
 
     setIsAiCalculating(true);
     try {
-      const res = await fetch('/api/calculate-menu', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          dishName: formData.dishName.trim(),
-          mealCategory: mealName,
-          dishType: formData.role || '主菜',
-          currentResidentCount: facilityInfo.residentCount
-        })
-      });
+      let data: any = null;
 
-      if (!res.ok) throw new Error('API failed');
-      const data = await res.json();
+      try {
+        const res = await fetch('/api/calculate-menu', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            dishName: targetName,
+            mealCategory: mealName,
+            dishType: formData.role || '主菜',
+            currentResidentCount: facilityInfo.residentCount
+          })
+        });
+
+        if (res.ok) {
+          const contentType = res.headers.get('content-type');
+          if (contentType && contentType.includes('application/json')) {
+            data = await res.json();
+          }
+        }
+      } catch (networkErr) {
+        console.warn('API endpoint not reachable, calculating with autonomous nutrition engine:', networkErr);
+      }
+
+      if (!data || !data.ingredients) {
+        data = calculateDishNutrition(
+          targetName,
+          mealName,
+          formData.role || '主菜',
+          facilityInfo.residentCount
+        );
+      }
 
       setFormData(prev => ({
         ...prev,
+        dishName: targetName,
         ingredients: data.ingredients,
         amounts: data.amounts,
         saltGrams: data.saltGrams,
-        calories: data.calories,
-        protein: data.protein,
-        fat: data.fat,
-        saltTotal: data.saltTotal,
-        cookingNotes: data.cookingNotes,
+        calories: Number(data.calories) || 0,
+        protein: Number(data.protein) || 0,
+        fat: Number(data.fat) || 0,
+        saltTotal: Number(data.saltTotal) || 0,
+        cookingNotes: data.cookingNotes || prev.cookingNotes,
         structured: data.structured
       }));
     } catch (e) {
-      console.error(e);
-      alert('自動計算でエラーが発生しました。手動で入力内容を調整できます。');
+      console.error('Calculation error fallback:', e);
+      const safeData = calculateDishNutrition(
+        targetName,
+        mealName,
+        formData.role || '主菜',
+        facilityInfo.residentCount
+      );
+      setFormData(prev => ({
+        ...prev,
+        dishName: targetName,
+        ingredients: safeData.ingredients,
+        amounts: safeData.amounts,
+        saltGrams: safeData.saltGrams,
+        calories: safeData.calories,
+        protein: safeData.protein,
+        fat: safeData.fat,
+        saltTotal: safeData.saltTotal,
+        cookingNotes: safeData.cookingNotes,
+        structured: safeData.structured
+      }));
     } finally {
       setIsAiCalculating(false);
     }
   };
 
   const handleSave = () => {
-    if (!formData.dishName?.trim()) {
+    const rawName = (formData.dishName || '').trim();
+    if (!rawName) {
       alert('料理名を入力してください');
       return;
+    }
+
+    let currentIng = formData.ingredients || '';
+    let currentCal = Number(formData.calories) || 0;
+    let autoData: any = null;
+
+    if (!currentIng || currentIng === '未入力' || currentCal === 0) {
+      autoData = calculateDishNutrition(rawName, mealName, formData.role || dish.role, facilityInfo.residentCount);
     }
 
     const updated: DishItem = {
       ...dish,
       role: formData.role || dish.role,
-      dishName: formData.dishName.trim(),
-      ingredients: formData.ingredients || '',
-      amounts: formData.amounts || '',
-      saltGrams: formData.saltGrams || '0.00',
-      calories: Number(formData.calories) || 0,
-      protein: Number(formData.protein) || 0,
-      fat: Number(formData.fat) || 0,
-      saltTotal: Number(formData.saltTotal) || 0,
-      cookingNotes: formData.cookingNotes || '',
-      structured: formData.structured || dish.structured
+      dishName: rawName,
+      ingredients: autoData ? autoData.ingredients : (formData.ingredients || ''),
+      amounts: autoData ? autoData.amounts : (formData.amounts || ''),
+      saltGrams: autoData ? autoData.saltGrams : (formData.saltGrams || '0.00'),
+      calories: autoData ? autoData.calories : (Number(formData.calories) || 0),
+      protein: autoData ? autoData.protein : (Number(formData.protein) || 0),
+      fat: autoData ? autoData.fat : (Number(formData.fat) || 0),
+      saltTotal: autoData ? autoData.saltTotal : (Number(formData.saltTotal) || 0),
+      cookingNotes: autoData ? autoData.cookingNotes : (formData.cookingNotes || ''),
+      structured: autoData ? autoData.structured : (formData.structured || dish.structured)
     };
 
     onSave(updated, mealId);
