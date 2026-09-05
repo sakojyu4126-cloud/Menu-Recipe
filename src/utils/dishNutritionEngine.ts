@@ -61,6 +61,179 @@ export function inferDishRole(dishName: string, fallbackRole?: DishItem['role'])
 }
 
 /**
+ * 分量テキストから1人前の主要食材量（グラム）および総重量を抽出する
+ */
+export function extractMainAmount(amountsStr: string): { mainAmount: number; totalFoodAmount: number; allNumbers: number[] } {
+  if (!amountsStr) return { mainAmount: 0, totalFoodAmount: 0, allNumbers: [] };
+
+  const lines = amountsStr.split('\n').map((l) => l.trim()).filter(Boolean);
+  // 1行目（主に主食材・副食材）
+  const firstLine = lines[0] || '';
+  const firstLineNumbers = (firstLine.match(/\d+(?:\.\d+)?/g) || []).map(Number);
+  const allNumbers = (amountsStr.match(/\d+(?:\.\d+)?/g) || []).map(Number);
+
+  const mainAmount = firstLineNumbers[0] || allNumbers[0] || 0;
+  const totalFoodAmount = firstLineNumbers.length > 0
+    ? firstLineNumbers.reduce((a, b) => a + b, 0)
+    : mainAmount;
+
+  return { mainAmount, totalFoodAmount, allNumbers };
+}
+
+/**
+ * 食塩量テキストから食塩相当量(g)を正確に算出する
+ */
+export function extractSaltTotal(saltStr: string): number {
+  if (!saltStr) return 0;
+  // "= 0.93" のような等号付きの場合、最後の合計値を優先
+  const equalMatch = saltStr.match(/=\s*(\d+(?:\.\d+)?)/);
+  if (equalMatch) {
+    return Math.round(parseFloat(equalMatch[1]) * 100) / 100;
+  }
+  // "食塩相当 0.88g" のような記載がある場合
+  const equivMatch = saltStr.match(/食塩相当\s*(\d+(?:\.\d+)?)/);
+  if (equivMatch) {
+    return Math.round(parseFloat(equivMatch[1]) * 100) / 100;
+  }
+  // それ以外は数値を抽出
+  const numbers = (saltStr.match(/\d+(?:\.\d+)?/g) || []).map(Number);
+  if (numbers.length === 0) return 0;
+  if (numbers.length === 1) return Math.round(numbers[0] * 100) / 100;
+
+  // 複数数値がある場合、合計（3g以下なら合算、それ以上なら最大値または最後の数値）
+  const sum = numbers.reduce((a, b) => a + b, 0);
+  if (sum <= 3.5) {
+    return Math.round(sum * 100) / 100;
+  }
+  return Math.round(Math.max(...numbers) * 100) / 100;
+}
+
+/**
+ * ユーザーが分量（amounts）を手動変更（例: 45gから75gへ変更）した際に、
+ * その増加率や食材比率に合わせて総カロリー、塩分量、タンパク質、脂質を確実に同期・再計算する関数
+ */
+export function recalculateNutritionFromAmounts(
+  newAmountsStr: string,
+  base: {
+    dishName?: string;
+    role?: DishItem['role'];
+    amounts?: string;
+    calories?: number;
+    protein?: number;
+    fat?: number;
+    saltTotal?: number;
+    saltGrams?: string;
+  },
+  referenceAmounts?: string
+): {
+  calories: number;
+  protein: number;
+  fat: number;
+  saltTotal: number;
+  saltGrams: string;
+  ratio: number;
+  isScaled: boolean;
+} {
+  const { mainAmount: newMain, totalFoodAmount: newTotal } = extractMainAmount(newAmountsStr);
+  const baseAmountsStr = referenceAmounts || base.amounts || '';
+  const { mainAmount: baseMain, totalFoodAmount: baseTotal } = extractMainAmount(baseAmountsStr);
+
+  const role = inferDishRole(base.dishName || '', base.role || '主菜');
+
+  // もし新しい分量が抽出できない場合は元の数値をそのまま返す
+  if (newMain <= 0 && newTotal <= 0) {
+    return {
+      calories: Number(base.calories) || 0,
+      protein: Number(base.protein) || 0,
+      fat: Number(base.fat) || 0,
+      saltTotal: Number(base.saltTotal) || 0,
+      saltGrams: base.saltGrams || '0.00',
+      ratio: 1,
+      isScaled: false
+    };
+  }
+
+  // 基準となる主食材量（もしbaseMainが未設定や0の場合は、典型的な既定値または45gを採用）
+  const effectiveBaseMain = baseMain > 0 ? baseMain : (role === '主菜' ? 45 : role === '副菜' ? 45 : 65);
+  const ratio = Math.max(0.2, Math.min(5.0, newMain / effectiveBaseMain));
+
+  // もし基準のカロリーや栄養価が0または欠落している場合は、役割と分量から逆算
+  let baseCal = Number(base.calories) || 0;
+  let baseProt = Number(base.protein) || 0;
+  let baseFat = Number(base.fat) || 0;
+  let baseSalt = Number(base.saltTotal) || 0;
+
+  if (baseCal <= 0) {
+    // 役割に応じた標準密度から推定
+    if (role === '主菜') {
+      baseCal = Math.round(newMain * 3.2); // 75gなら240kcal
+      baseProt = Math.round((newMain * 0.18) * 10) / 10; // 75gなら13.5g
+      baseFat = Math.round((newMain * 0.16) * 10) / 10;  // 75gなら12g
+      baseSalt = Math.round((0.45 + (newMain * 0.007)) * 100) / 100; // 75gなら約0.97g
+    } else if (role === '副菜') {
+      baseCal = Math.round(newMain * 1.35); // 60gなら81kcal
+      baseProt = Math.round((newMain * 0.05) * 10) / 10;
+      baseFat = Math.round((newMain * 0.06) * 10) / 10;
+      baseSalt = Math.round((0.25 + (newMain * 0.005)) * 100) / 100;
+    } else if (role === '汁物') {
+      baseCal = 45;
+      baseProt = 2.5;
+      baseFat = 1.2;
+      baseSalt = 0.80;
+    } else {
+      // 主食
+      baseCal = Math.round(newMain * 3.6);
+      baseProt = Math.round((newMain * 0.06) * 10) / 10;
+      baseFat = 0.5;
+      baseSalt = 0.0;
+    }
+    return {
+      calories: baseCal,
+      protein: baseProt,
+      fat: baseFat,
+      saltTotal: baseSalt,
+      saltGrams: base.saltGrams || `${baseSalt.toFixed(2)}`,
+      ratio,
+      isScaled: true
+    };
+  }
+
+  // 既存の数値が存在する場合、分量の増減比率（例: 75/45 = 1.67倍）に応じて同期・再計算
+  const scaledCalories = Math.round(baseCal * ratio);
+  const scaledProtein = Math.round(baseProt * ratio * 10) / 10;
+  const scaledFat = Math.round(baseFat * ratio * 10) / 10;
+  const scaledSalt = Math.round(baseSalt * ratio * 100) / 100;
+
+  // saltGrams テキストの内訳も比率に合わせて更新（または再成形）
+  let newSaltGrams = base.saltGrams || `${scaledSalt.toFixed(2)}`;
+  if (base.saltGrams && ratio !== 1) {
+    // もし数値があれば比率でスケールして末尾に合計を表示
+    const parts = base.saltGrams.split('\n');
+    const scaledLines = parts.map((line) => {
+      if (line.includes('=')) {
+        return line.replace(/=\s*[\d.]+/g, `= ${scaledSalt.toFixed(2)}`);
+      }
+      return line.replace(/\b(\d+(?:\.\d+)?)\b/g, (match) => {
+        const val = parseFloat(match);
+        if (isNaN(val)) return match;
+        return (Math.round(val * ratio * 100) / 100).toFixed(2);
+      });
+    });
+    newSaltGrams = scaledLines.join('\n');
+  }
+
+  return {
+    calories: scaledCalories,
+    protein: scaledProtein,
+    fat: scaledFat,
+    saltTotal: scaledSalt,
+    saltGrams: newSaltGrams,
+    ratio,
+    isScaled: ratio !== 1
+  };
+}
+
+/**
  * 1日1400〜1600kcal、食塩約6.0gの基準に基づき、ボリューム・旨味・調味料を逆算算定した
  * 施設・食堂向け定番料理マスターデータベース
  */
@@ -614,7 +787,7 @@ function detectCuisine(name: string): 'western' | 'chinese' | 'japanese' {
 /**
  * 1日1400〜1600kcal、食塩約6gを達成できるよう逆算・設計された高精度自律計算エンジン
  */
-export function calculateDishNutrition(
+function internalCalculateDish(
   dishName: string,
   mealCategory: string = '昼食',
   dishType?: DishItem['role'],
@@ -988,5 +1161,56 @@ export function calculateDishNutrition(
       { name: '上白糖', amountPerPerson: 2.5, unit: 'g', saltPerPerson: 0, isSeasoning: true }
     ],
     calculatedForCount: residentCount
+  };
+}
+
+/**
+ * 料理名・区分・役割および指定分量から、栄養価・食材構成・塩分量を高精度に算定するメインエクスポート関数
+ * customAmount（例: "75" または 75g）が指定された場合、分量の増加に合わせてカロリー・塩分量・PFCも同期計算されます。
+ */
+export function calculateDishNutrition(
+  dishName: string,
+  mealCategory: string = '昼食',
+  dishType?: DishItem['role'],
+  residentCount: number = 55,
+  customAmount?: string | number
+): CalculatedDishResult {
+  const baseResult = internalCalculateDish(dishName, mealCategory, dishType, residentCount);
+
+  if (!customAmount) {
+    return baseResult;
+  }
+
+  const customStr = String(customAmount).trim();
+  if (!customStr) {
+    return baseResult;
+  }
+
+  // ユーザー指定の分量（例: "75" や "75 / 35"）に合わせて栄養価を同期スケール
+  const scaled = recalculateNutritionFromAmounts(customStr, baseResult);
+
+  let finalAmounts = customStr;
+  const { mainAmount: newMain } = extractMainAmount(customStr);
+
+  // もしユーザーが単一の主材料分量（例: "75"）のみを指定し、ベースが調味料行などを含む複数行だった場合
+  if (newMain > 0 && !customStr.includes('\n') && baseResult.amounts.includes('\n')) {
+    const lines = baseResult.amounts.split('\n');
+    const firstLine = lines[0] || '';
+    const otherLines = lines.slice(1);
+    const updatedFirstLine = firstLine.replace(/\b\d+(\.\d+)?\b/, String(newMain));
+    const scaledOtherLines = otherLines.map((l) =>
+      l.replace(/\b\d+(\.\d+)?\b/g, (m) => (Math.round(parseFloat(m) * scaled.ratio * 10) / 10).toString())
+    );
+    finalAmounts = [updatedFirstLine, ...scaledOtherLines].join('\n');
+  }
+
+  return {
+    ...baseResult,
+    amounts: finalAmounts,
+    calories: scaled.calories,
+    protein: scaled.protein,
+    fat: scaled.fat,
+    saltTotal: scaled.saltTotal,
+    saltGrams: scaled.saltGrams
   };
 }

@@ -13,7 +13,15 @@ app.use(express.json());
 
 // API Route: Calculate nutritional values, food composition, and amounts for any dish
 app.post('/api/calculate-menu', async (req, res) => {
-  const { dishName, mealCategory = '昼食', dishType = '主菜', currentResidentCount = 57 } = req.body;
+  const {
+    dishName,
+    mealCategory = '昼食',
+    dishType = '主菜',
+    currentResidentCount = 57,
+    amounts = '',
+    customAmount = '',
+    ingredients = ''
+  } = req.body;
 
   if (!dishName || typeof dishName !== 'string') {
     return res.status(400).json({ error: '料理名（dishName）が必要です' });
@@ -21,6 +29,7 @@ app.post('/api/calculate-menu', async (req, res) => {
 
   const trimmed = dishName.trim();
   const effectiveRole = inferDishRole(trimmed, dishType);
+  const specifiedAmount = (amounts || customAmount || '').trim();
 
   // If Gemini API Key is available and not a placeholder, call gemini-3.8-flash with timeout
   const apiKey = process.env.GEMINI_API_KEY;
@@ -30,13 +39,12 @@ app.post('/api/calculate-menu', async (req, res) => {
       const prompt = `あなたは給食・食堂献立設計の専門管理栄養士です。
 料理名: 「${trimmed}」（区分: ${mealCategory}、分類: ${effectiveRole}）について、
 【1日1400〜1600kcal、1日食塩摂取量約6.0g（朝1.8g、昼2.1g、夕2.1g）】を達成できるよう逆算した、本格的で満足感のある食材構成・調味料・栄養価を算定してください。
-
+${specifiedAmount ? `\n【重要：ユーザー指定分量】\n指定された1人前分量: 「${specifiedAmount}」\n※分量が増加・指定された場合は、当然それに比例して総カロリー、タンパク質、脂質、食塩相当量、調味料も同期・再計算してください。分量が増えているのに元の低い数字のまま据え置くことは絶対に厳禁です。\n` : ''}
+${ingredients ? `ユーザー指定食材・調味料: 「${ingredients}」\n` : ''}
 【厳守事項】：
 1. 「監査」という単語は絶対に使用しないでください。
 2. 食材の分量は肉・魚・野菜問わず一律45gといった極端に少なすぎる見積もりは厳禁です。
-   - 主菜（肉、魚、卵、コロッケ等）：主タンパク質65〜85g、副野菜25〜45g（合計95〜130g）、210〜310kcal、食塩0.85〜1.15g
-   - 副菜（和え物、煮物、サラダ等）：野菜・具材50〜75g、副具材15〜25g（合計65〜90g）、70〜110kcal、食塩0.45〜0.65g（砂糖、みりん、ごま、マヨネーズ等でエネルギー補給）
-   - 汁物：具材30〜45g、汁150g、35〜55kcal、食塩0.75〜0.85g
+   ${specifiedAmount ? `ユーザーが指定した分量「${specifiedAmount}」を厳格に反映してください。` : `- 主菜（肉、魚、卵、コロッケ等）：主タンパク質65〜85g、副野菜25〜45g（合計95〜130g）、210〜310kcal、食塩0.85〜1.15g\n   - 副菜（和え物、煮物、サラダ等）：野菜・具材50〜75g、副具材15〜25g（合計65〜90g）、70〜110kcal、食塩0.45〜0.65g\n   - 汁物：具材30〜45g、汁150g、35〜55kcal、食塩0.75〜0.85g`}
 3. 洋食料理（オムレツ、ウインナー、ポトフ、コロッケ、コールスロー等）にみりんや薄口醤油を画一的に使用しないでください。
    洋食にはトマトケチャップ、中濃ソース、洋風コンソメ、マヨネーズ、バター、オリーブ油、上白糖、食塩こしょう等、料理に合致した本物の調味料を使用してください。中華には甜麺醤・豆板醤・ごま油等を使用してください。
 
@@ -44,7 +52,7 @@ app.post('/api/calculate-menu', async (req, res) => {
 {
   "dishName": "${trimmed}",
   "ingredients": "食材1 / 食材2\\n調味料1 / 調味料2",
-  "amounts": "食材1g / 食材2g\\n調味料1g / 調味料2g",
+  "amounts": "${specifiedAmount || '食材1g / 食材2g\\n調味料1g / 調味料2g'}",
   "saltGrams": "0.00\\n0.45 / 0.30 = 0.75",
   "calories": 230,
   "protein": 12.5,
@@ -79,7 +87,7 @@ app.post('/api/calculate-menu', async (req, res) => {
         mealCategory,
         dishType: effectiveRole,
         ingredients: parsed.ingredients || '食材',
-        amounts: parsed.amounts || '70',
+        amounts: parsed.amounts || specifiedAmount || '75',
         saltGrams: parsed.saltGrams || '0.60',
         calories: Number(parsed.calories) || (effectiveRole === '主菜' ? 240 : effectiveRole === '副菜' ? 85 : 45),
         protein: Number(parsed.protein) || 10.5,
@@ -88,7 +96,7 @@ app.post('/api/calculate-menu', async (req, res) => {
         cookingNotes: (parsed.cookingNotes || '素材の旨味を引き出し適度な味付けで調理').replace(/監査/g, '栄養管理'),
         structured: Array.isArray(parsed.structured)
           ? parsed.structured
-          : [{ name: trimmed, amountPerPerson: 70, unit: 'g', saltPerPerson: 0.5, isSeasoning: false }],
+          : [{ name: trimmed, amountPerPerson: 75, unit: 'g', saltPerPerson: 0.5, isSeasoning: false }],
         calculatedForCount: currentResidentCount
       });
     } catch (err) {
@@ -97,7 +105,13 @@ app.post('/api/calculate-menu', async (req, res) => {
   }
 
   // Heuristic intelligent fallback when API key is not present or offline
-  const calculated = calculateDishNutrition(trimmed, mealCategory, effectiveRole, currentResidentCount);
+  const calculated = calculateDishNutrition(
+    trimmed,
+    mealCategory,
+    effectiveRole,
+    currentResidentCount,
+    specifiedAmount
+  );
   return res.json(calculated);
 });
 

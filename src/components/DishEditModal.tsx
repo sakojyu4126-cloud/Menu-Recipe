@@ -1,7 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { X, Sparkles, Check, Flame, HeartPulse, Scale, ShieldAlert } from 'lucide-react';
+import { X, Sparkles, Check, Flame, HeartPulse, Scale, ShieldAlert, RefreshCw } from 'lucide-react';
 import { DishItem, FacilityInfo } from '../types';
-import { calculateDishNutrition, inferDishRole } from '../utils/dishNutritionEngine';
+import {
+  calculateDishNutrition,
+  inferDishRole,
+  recalculateNutritionFromAmounts,
+  extractSaltTotal
+} from '../utils/dishNutritionEngine';
 
 interface Props {
   isOpen: boolean;
@@ -24,21 +29,56 @@ export const DishEditModal: React.FC<Props> = ({
 }) => {
   const [formData, setFormData] = useState<Partial<DishItem>>({});
   const [isAiCalculating, setIsAiCalculating] = useState(false);
+  const [syncMessage, setSyncMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (dish) {
       setFormData({ ...dish });
+      setSyncMessage(null);
     }
   }, [dish]);
 
   if (!isOpen || !dish) return null;
+
+  // 使用量（amounts）の変更時に、カロリー・タンパク質・脂質・塩分量を自動同期
+  const handleAmountsChange = (newAmounts: string) => {
+    const scaled = recalculateNutritionFromAmounts(newAmounts, formData, dish.amounts);
+
+    if (scaled.isScaled) {
+      setFormData(prev => ({
+        ...prev,
+        amounts: newAmounts,
+        calories: scaled.calories,
+        protein: scaled.protein,
+        fat: scaled.fat,
+        saltTotal: scaled.saltTotal,
+        saltGrams: scaled.saltGrams
+      }));
+      setSyncMessage(`💡 分量の変更に合わせて、カロリー（${scaled.calories} kcal）と塩分量（${scaled.saltTotal} g）を自動同期しました`);
+    } else {
+      setFormData(prev => ({ ...prev, amounts: newAmounts }));
+    }
+  };
+
+  // 食塩内訳の変更時に、食塩相当量合計を自動同期
+  const handleSaltGramsChange = (newSaltGrams: string) => {
+    const calculatedSalt = extractSaltTotal(newSaltGrams);
+    setFormData(prev => ({
+      ...prev,
+      saltGrams: newSaltGrams,
+      saltTotal: calculatedSalt > 0 ? calculatedSalt : prev.saltTotal
+    }));
+  };
 
   const handleAiRecalculate = async () => {
     const targetName = (formData.dishName || '').trim();
     if (!targetName) return;
 
     const targetRole = inferDishRole(targetName, formData.role || dish.role);
+    const specifiedAmount = (formData.amounts || '').trim();
     setIsAiCalculating(true);
+    setSyncMessage(null);
+
     try {
       let data: any = null;
 
@@ -50,7 +90,9 @@ export const DishEditModal: React.FC<Props> = ({
             dishName: targetName,
             mealCategory: mealName,
             dishType: targetRole,
-            currentResidentCount: facilityInfo.residentCount
+            currentResidentCount: facilityInfo.residentCount,
+            amounts: specifiedAmount,
+            ingredients: formData.ingredients || ''
           })
         });
 
@@ -69,7 +111,8 @@ export const DishEditModal: React.FC<Props> = ({
           targetName,
           mealName,
           targetRole,
-          facilityInfo.residentCount
+          facilityInfo.residentCount,
+          specifiedAmount
         );
       }
 
@@ -78,7 +121,7 @@ export const DishEditModal: React.FC<Props> = ({
         dishName: targetName,
         role: data.dishType || targetRole,
         ingredients: data.ingredients,
-        amounts: data.amounts,
+        amounts: data.amounts || specifiedAmount || prev.amounts,
         saltGrams: data.saltGrams,
         calories: Number(data.calories) || 0,
         protein: Number(data.protein) || 0,
@@ -87,20 +130,22 @@ export const DishEditModal: React.FC<Props> = ({
         cookingNotes: data.cookingNotes || prev.cookingNotes,
         structured: data.structured
       }));
+      setSyncMessage(`✨ 指定分量（${data.amounts || specifiedAmount}g）に基づき、高精度にAI再計算・同期しました`);
     } catch (e) {
       console.error('Calculation error fallback:', e);
       const safeData = calculateDishNutrition(
         targetName,
         mealName,
         targetRole,
-        facilityInfo.residentCount
+        facilityInfo.residentCount,
+        specifiedAmount
       );
       setFormData(prev => ({
         ...prev,
         dishName: targetName,
         role: safeData.dishType || targetRole,
         ingredients: safeData.ingredients,
-        amounts: safeData.amounts,
+        amounts: safeData.amounts || specifiedAmount,
         saltGrams: safeData.saltGrams,
         calories: safeData.calories,
         protein: safeData.protein,
@@ -122,12 +167,30 @@ export const DishEditModal: React.FC<Props> = ({
     }
 
     const targetRole = inferDishRole(rawName, formData.role || dish.role);
+    const currentAmounts = (formData.amounts || '').trim();
+    let finalCalories = Number(formData.calories) || 0;
+    let finalSalt = Number(formData.saltTotal) || 0;
+    let finalProtein = Number(formData.protein) || 0;
+    let finalFat = Number(formData.fat) || 0;
+    let finalSaltGrams = formData.saltGrams || dish.saltGrams;
+
+    // もし分量が変更されていて、カロリーが未同期のまま保存されようとしている場合、確実に同期
+    if (currentAmounts && currentAmounts !== dish.amounts) {
+      const syncResult = recalculateNutritionFromAmounts(currentAmounts, formData, dish.amounts);
+      if (syncResult.isScaled) {
+        finalCalories = syncResult.calories;
+        finalSalt = syncResult.saltTotal;
+        finalProtein = syncResult.protein;
+        finalFat = syncResult.fat;
+        finalSaltGrams = syncResult.saltGrams;
+      }
+    }
+
     let currentIng = formData.ingredients || '';
-    let currentCal = Number(formData.calories) || 0;
     let autoData: any = null;
 
-    if (!currentIng || currentIng === '未入力' || currentCal === 0 || rawName !== dish.dishName) {
-      autoData = calculateDishNutrition(rawName, mealName, targetRole, facilityInfo.residentCount);
+    if (!currentIng || currentIng === '未入力' || finalCalories === 0 || rawName !== dish.dishName) {
+      autoData = calculateDishNutrition(rawName, mealName, targetRole, facilityInfo.residentCount, currentAmounts);
     }
 
     const updated: DishItem = {
@@ -136,11 +199,11 @@ export const DishEditModal: React.FC<Props> = ({
       dishName: rawName,
       ingredients: autoData ? autoData.ingredients : (formData.ingredients || ''),
       amounts: autoData ? autoData.amounts : (formData.amounts || ''),
-      saltGrams: autoData ? autoData.saltGrams : (formData.saltGrams || '0.00'),
-      calories: autoData ? autoData.calories : (Number(formData.calories) || 0),
-      protein: autoData ? autoData.protein : (Number(formData.protein) || 0),
-      fat: autoData ? autoData.fat : (Number(formData.fat) || 0),
-      saltTotal: autoData ? autoData.saltTotal : (Number(formData.saltTotal) || 0),
+      saltGrams: autoData ? autoData.saltGrams : finalSaltGrams,
+      calories: autoData ? autoData.calories : finalCalories,
+      protein: autoData ? autoData.protein : finalProtein,
+      fat: autoData ? autoData.fat : finalFat,
+      saltTotal: autoData ? autoData.saltTotal : finalSalt,
       cookingNotes: autoData ? autoData.cookingNotes : (formData.cookingNotes || ''),
       structured: autoData ? autoData.structured : (formData.structured || dish.structured)
     };
@@ -219,6 +282,14 @@ export const DishEditModal: React.FC<Props> = ({
             </div>
           </div>
 
+          {/* Sync notification message */}
+          {syncMessage && (
+            <div className="flex items-center gap-2 p-2.5 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs rounded-lg animate-in fade-in">
+              <RefreshCw className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span className="font-medium">{syncMessage}</span>
+            </div>
+          )}
+
           {/* Nutritional Breakdown Row */}
           <div className="p-3 bg-stone-50 rounded-lg border border-stone-200">
             <div className="text-xs font-bold text-stone-700 mb-2 flex items-center gap-1.5">
@@ -286,13 +357,18 @@ export const DishEditModal: React.FC<Props> = ({
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-stone-700 mb-1">
-                使用量(g) 1人分
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs font-bold text-stone-700">
+                  使用量(g) 1人分
+                </label>
+                <span className="text-[10px] text-emerald-700 font-semibold bg-emerald-50 px-1.5 py-0.5 rounded">
+                  分量変更でカロリー・塩分を自動同期
+                </span>
+              </div>
               <textarea
                 rows={4}
                 value={formData.amounts ?? ''}
-                onChange={(e) => setFormData({ ...formData, amounts: e.target.value })}
+                onChange={(e) => handleAmountsChange(e.target.value)}
                 className="w-full text-xs font-mono bg-white border border-stone-300 rounded-lg p-2.5 text-stone-900 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                 placeholder="60&#10;1"
               />
@@ -304,13 +380,18 @@ export const DishEditModal: React.FC<Props> = ({
 
           {/* Salt Detailed Breakdown */}
           <div>
-            <label className="block text-xs font-bold text-stone-700 mb-1">
-              食塩量(g)の内訳詳細
-            </label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-xs font-bold text-stone-700">
+                食塩量(g)の内訳詳細
+              </label>
+              <span className="text-[10px] text-stone-500">
+                ※内訳変更で食塩相当量合計に自動反映
+              </span>
+            </div>
             <input
               type="text"
               value={formData.saltGrams ?? ''}
-              onChange={(e) => setFormData({ ...formData, saltGrams: e.target.value })}
+              onChange={(e) => handleSaltGramsChange(e.target.value)}
               className="w-full text-xs font-mono bg-white border border-stone-300 rounded-lg px-3 py-2 text-stone-900 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
               placeholder="0.60&#10;0.16"
             />

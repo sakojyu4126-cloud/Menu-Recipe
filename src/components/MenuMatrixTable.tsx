@@ -2,7 +2,12 @@ import React, { useState } from 'react';
 import { Sparkles, Trash2, Edit3, Check, X, ArrowUp, ArrowDown } from 'lucide-react';
 import { MealData, DishItem, FacilityInfo } from '../types';
 import { calculateMealTotals } from '../utils/nutrition';
-import { calculateDishNutrition, inferDishRole } from '../utils/dishNutritionEngine';
+import {
+  calculateDishNutrition,
+  inferDishRole,
+  recalculateNutritionFromAmounts,
+  extractSaltTotal
+} from '../utils/dishNutritionEngine';
 
 interface Props {
   meal: MealData;
@@ -37,20 +42,46 @@ export const MenuMatrixTable: React.FC<Props> = ({
   };
 
   const handleSaveEdit = (id: string) => {
-    const targetItem = meal.items.find(i => i.id === id);
+    const targetItem = meal.items.find((i) => i.id === id);
     const newName = (editForm.dishName ?? targetItem?.dishName ?? '').trim();
+    if (!newName) {
+      alert('料理名を入力してください');
+      return;
+    }
+
     const targetRole = inferDishRole(newName, editForm.role || targetItem?.role);
+    const newAmounts = (editForm.amounts ?? targetItem?.amounts ?? '').trim();
+    const oldAmounts = (targetItem?.amounts ?? '').trim();
+
+    // 分量が変更された場合、カロリー・塩分・タンパク質・脂質を自動スケール同期
+    let finalCalories = Number(editForm.calories) || targetItem?.calories || 0;
+    let finalSalt = Number(editForm.saltTotal) || targetItem?.saltTotal || 0;
+    let finalProtein = Number(editForm.protein) || targetItem?.protein || 0;
+    let finalFat = Number(editForm.fat) || targetItem?.fat || 0;
+    let finalSaltGrams = editForm.saltGrams ?? targetItem?.saltGrams ?? '0.00';
+
+    if (newAmounts && newAmounts !== oldAmounts) {
+      const scaled = recalculateNutritionFromAmounts(newAmounts, editForm, oldAmounts);
+      if (scaled.isScaled) {
+        finalCalories = scaled.calories;
+        finalSalt = scaled.saltTotal;
+        finalProtein = scaled.protein;
+        finalFat = scaled.fat;
+        finalSaltGrams = scaled.saltGrams;
+      }
+    }
+
+    let autoCalcData: any = null;
     const currentIng = editForm.ingredients ?? targetItem?.ingredients ?? '';
-    const currentCal = Number(editForm.calories) || Number(targetItem?.calories) || 0;
 
     // もし料理名が入力されていて、食材やカロリーが未入力(0)または料理名が変更された場合は自動で栄養価と調味料を算定
-    let autoCalcData: any = null;
-    if (newName && (newName !== targetItem?.dishName || !currentIng || currentIng === '未入力' || currentCal === 0)) {
+    if (newName && (newName !== targetItem?.dishName || !currentIng || currentIng === '未入力' || finalCalories === 0)) {
       autoCalcData = calculateDishNutrition(
         newName,
         meal.name,
         targetRole,
-        facilityInfo.residentCount
+        facilityInfo.residentCount,
+        newAmounts
       );
     }
 
@@ -63,11 +94,11 @@ export const MenuMatrixTable: React.FC<Props> = ({
           dishName: newName,
           ingredients: autoCalcData ? autoCalcData.ingredients : (editForm.ingredients ?? item.ingredients),
           amounts: autoCalcData ? autoCalcData.amounts : (editForm.amounts ?? item.amounts),
-          saltGrams: autoCalcData ? autoCalcData.saltGrams : (editForm.saltGrams ?? item.saltGrams),
-          calories: autoCalcData ? autoCalcData.calories : (Number(editForm.calories) || item.calories),
-          protein: autoCalcData ? autoCalcData.protein : (Number(editForm.protein) || item.protein),
-          fat: autoCalcData ? autoCalcData.fat : (Number(editForm.fat) || item.fat),
-          saltTotal: autoCalcData ? autoCalcData.saltTotal : (Number(editForm.saltTotal) || item.saltTotal),
+          saltGrams: autoCalcData ? autoCalcData.saltGrams : finalSaltGrams,
+          calories: autoCalcData ? autoCalcData.calories : finalCalories,
+          protein: autoCalcData ? autoCalcData.protein : finalProtein,
+          fat: autoCalcData ? autoCalcData.fat : finalFat,
+          saltTotal: autoCalcData ? autoCalcData.saltTotal : finalSalt,
           cookingNotes: autoCalcData ? autoCalcData.cookingNotes : (editForm.cookingNotes ?? item.cookingNotes),
           structured: autoCalcData ? autoCalcData.structured : (editForm.structured ?? item.structured)
         } as DishItem;
@@ -85,11 +116,14 @@ export const MenuMatrixTable: React.FC<Props> = ({
     if (!targetName) return;
 
     const targetRole = inferDishRole(targetName, editForm.role || dish.role);
+    const targetAmount = (editingId === dish.id && editForm.amounts ? editForm.amounts : dish.amounts || '').trim();
+    const targetIngredients = (editingId === dish.id && editForm.ingredients ? editForm.ingredients : dish.ingredients || '').trim();
+
     setLoadingAiId(dish.id);
     try {
       let data: any = null;
 
-      // まず Vercel/サーバーの Gemini API エンドポイントを試行
+      // まず Vercel/サーバーの Gemini API エンドポイントを試行（ユーザー指定分量を送信）
       try {
         const res = await fetch('/api/calculate-menu', {
           method: 'POST',
@@ -98,7 +132,9 @@ export const MenuMatrixTable: React.FC<Props> = ({
             dishName: targetName,
             mealCategory: meal.name,
             dishType: targetRole,
-            currentResidentCount: facilityInfo.residentCount
+            currentResidentCount: facilityInfo.residentCount,
+            amounts: targetAmount,
+            ingredients: targetIngredients
           })
         });
         if (res.ok) {
@@ -117,7 +153,8 @@ export const MenuMatrixTable: React.FC<Props> = ({
           targetName,
           meal.name,
           targetRole,
-          facilityInfo.residentCount
+          facilityInfo.residentCount,
+          targetAmount
         );
       }
 
@@ -126,7 +163,7 @@ export const MenuMatrixTable: React.FC<Props> = ({
         dishName: targetName,
         role: data.dishType || targetRole,
         ingredients: data.ingredients,
-        amounts: data.amounts,
+        amounts: data.amounts || targetAmount || dish.amounts,
         saltGrams: data.saltGrams,
         calories: Number(data.calories) || 0,
         protein: Number(data.protein) || 0,
@@ -144,19 +181,20 @@ export const MenuMatrixTable: React.FC<Props> = ({
       onUpdateMeal({ ...meal, items: updatedItems });
     } catch (err) {
       console.error('AI calculation fallback handling:', err);
-      // 万一の例外でもエラーダイアログは出さず、自律計算を実行して反映
+      // 万一の例外でも自律計算を実行して指定分量で反映
       const safeData = calculateDishNutrition(
         targetName,
         meal.name,
         targetRole,
-        facilityInfo.residentCount
+        facilityInfo.residentCount,
+        targetAmount
       );
       const fallbackDish: DishItem = {
         ...dish,
         dishName: targetName,
         role: safeData.dishType || targetRole,
         ingredients: safeData.ingredients,
-        amounts: safeData.amounts,
+        amounts: safeData.amounts || targetAmount,
         saltGrams: safeData.saltGrams,
         calories: safeData.calories,
         protein: safeData.protein,
@@ -333,7 +371,23 @@ export const MenuMatrixTable: React.FC<Props> = ({
                       <textarea
                         rows={2}
                         value={editForm.amounts ?? ''}
-                        onChange={(e) => setEditForm({ ...editForm, amounts: e.target.value })}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          const scaled = recalculateNutritionFromAmounts(val, editForm, dish.amounts);
+                          if (scaled.isScaled) {
+                            setEditForm({
+                              ...editForm,
+                              amounts: val,
+                              calories: scaled.calories,
+                              protein: scaled.protein,
+                              fat: scaled.fat,
+                              saltTotal: scaled.saltTotal,
+                              saltGrams: scaled.saltGrams
+                            });
+                          } else {
+                            setEditForm({ ...editForm, amounts: val });
+                          }
+                        }}
                         className="w-full text-xs text-center bg-white border border-stone-300 rounded px-1 py-0.5 focus:ring-1 focus:ring-emerald-500 focus:outline-none"
                         placeholder="60 / 1"
                       />
@@ -354,8 +408,16 @@ export const MenuMatrixTable: React.FC<Props> = ({
                       <textarea
                         rows={2}
                         value={editForm.saltGrams ?? ''}
-                        onChange={(e) => setEditForm({ ...editForm, saltGrams: e.target.value })}
-                        className="w-full text-xs text-center bg-white border border-stone-300 rounded px-1 py-0.5 focus:ring-1 focus:ring-emerald-500 focus:outline-none"
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          const calculatedSalt = extractSaltTotal(val);
+                          setEditForm({
+                            ...editForm,
+                            saltGrams: val,
+                            saltTotal: calculatedSalt > 0 ? calculatedSalt : editForm.saltTotal
+                          });
+                        }}
+                        className="w-full text-xs text-center bg-white border border-stone-300 rounded px-1 py-0.5 focus:ring-1 focus:ring-emerald-500 focus:outline-none font-bold text-[#b93822]"
                         placeholder="0.60 / 0.16"
                       />
                     ) : (
