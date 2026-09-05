@@ -21,6 +21,8 @@ export const PrintModal: React.FC<Props> = ({
   // Mode: '2days' (default recommended), '3days-portrait', '3days-landscape', or '1day'
   const initialMode = days.length === 3 ? '3days-portrait' : days.length === 1 ? '1day' : '2days';
   const [printMode, setPrintMode] = useState<'2days' | '3days-portrait' | '3days-landscape' | '1day'>(initialMode);
+  // 食塩量の印刷表示形式: 'compact' (最小限・使用食材行幅に合わせる) / 'full' (計算式全表示)
+  const [saltPrintMode, setSaltPrintMode] = useState<'compact' | 'full'>('compact');
 
   // Prepare the target days for the selected print mode
   const targetDays: DayMenu[] = useMemo(() => {
@@ -85,6 +87,51 @@ export const PrintModal: React.FC<Props> = ({
 
     const lineHeight = isLandscape || is3DaysPortrait ? '1.1' : is2Days ? '1.15' : '1.3';
 
+    // 食塩量セルの印刷用フォーマッター（最小限または全表示）
+    const formatPrintSalt = (item: any) => {
+      if (saltPrintMode === 'full') {
+        return item.saltGrams || '-';
+      }
+
+      // 'compact': 使用食材・調味料の行幅に合わせて可能な範囲でコンパクトに表示
+      const text = (item.saltGrams ?? '').trim();
+      if (!text || text === '-') {
+        return item.saltTotal > 0 ? `${item.saltTotal.toFixed(2)}g` : '-';
+      }
+
+      const lines = text.split('\n').map((l: string) => l.trim()).filter(Boolean);
+
+      // 1行だけで短い場合はそのまま
+      if (lines.length <= 1 && text.length <= 12) {
+        return text;
+      }
+
+      // 複数行の場合: 使用食材・調味料の行幅に合わせて2行程度に収める
+      if (lines.length > 1) {
+        const firstLine = lines[0];
+        const lastLine = lines[lines.length - 1];
+
+        let lastSummary = lastLine;
+        if (lastLine.includes('=')) {
+          const eqParts = lastLine.split('=');
+          lastSummary = '=' + eqParts[eqParts.length - 1].trim();
+        }
+        return `${firstLine}\n${lastSummary}`;
+      }
+
+      // 1行で = を含む長い式の場合
+      if (text.includes('=')) {
+        const eqParts = text.split('=');
+        return '=' + eqParts[eqParts.length - 1].trim();
+      }
+
+      if (item.saltTotal > 0) {
+        return `${item.saltTotal.toFixed(2)}g`;
+      }
+
+      return text;
+    };
+
     // Render a single day's tables
     const renderDayContent = (dayItem: DayMenu, dayIndex: number) => {
       const dayTotals = calculateDayTotals(dayItem, facilityInfo.maxDailySaltTarget);
@@ -107,7 +154,7 @@ export const PrintModal: React.FC<Props> = ({
             </td>
             <td style="border: 1px solid #000; padding: ${cellPadding}; width: 220px; white-space: pre-line; line-height: ${lineHeight};">${item.ingredients || '-'}</td>
             <td style="border: 1px solid #000; padding: ${cellPadding}; text-align: right; width: 62px; font-family: monospace; white-space: pre-line;">${item.amounts || '-'}</td>
-            <td style="border: 1px solid #000; padding: ${cellPadding}; text-align: right; width: 62px; font-family: monospace; white-space: pre-line; font-weight: bold;">${item.saltGrams || '-'}</td>
+            <td style="border: 1px solid #000; padding: ${cellPadding}; text-align: right; width: 62px; font-family: monospace; white-space: pre-line; font-weight: bold;">${formatPrintSalt(item)}</td>
           </tr>
         `
           )
@@ -355,6 +402,51 @@ export const PrintModal: React.FC<Props> = ({
                 </div>
                 <div className="text-[11px] text-stone-500 mt-1 font-normal">
                   A4横向きで3日分を3列にすっきり配置。見やすく省スペース。
+                </div>
+              </button>
+            </div>
+          </div>
+
+          {/* 食塩量計算式の印刷出力形式選択 */}
+          <div>
+            <label className="block text-xs font-bold text-stone-800 mb-1.5 flex items-center justify-between">
+              <span>食塩量(g)の印刷レイアウト形式</span>
+              <span className="text-[10px] text-stone-500 font-normal">※縦長化・はみ出しを防止</span>
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setSaltPrintMode('compact')}
+                className={`p-2 rounded-lg border text-left transition-all cursor-pointer ${
+                  saltPrintMode === 'compact'
+                    ? 'border-emerald-700 bg-emerald-50/70 text-emerald-950 font-bold ring-1 ring-emerald-700 shadow-xs'
+                    : 'border-stone-300 bg-white hover:bg-stone-50 text-stone-700'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-xs">【最小限表示（推奨）】</span>
+                  {saltPrintMode === 'compact' && <Check className="w-3.5 h-3.5 text-emerald-700" />}
+                </div>
+                <div className="text-[10px] text-stone-500 mt-0.5 font-normal">
+                  使用食材・調味料の行幅に合わせてコンパクトに要約。用紙の縦伸びを防ぎます。
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSaltPrintMode('full')}
+                className={`p-2 rounded-lg border text-left transition-all cursor-pointer ${
+                  saltPrintMode === 'full'
+                    ? 'border-emerald-700 bg-emerald-50/70 text-emerald-950 font-bold ring-1 ring-emerald-700 shadow-xs'
+                    : 'border-stone-300 bg-white hover:bg-stone-50 text-stone-700'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-xs">【詳細式を全表示】</span>
+                  {saltPrintMode === 'full' && <Check className="w-3.5 h-3.5 text-emerald-700" />}
+                </div>
+                <div className="text-[10px] text-stone-500 mt-0.5 font-normal">
+                  食材・調味料ごとの塩分内訳・計算過程を全行印刷します。
                 </div>
               </button>
             </div>

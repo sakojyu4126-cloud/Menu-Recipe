@@ -28,8 +28,80 @@ export const MenuMatrixTable: React.FC<Props> = ({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [loadingAiId, setLoadingAiId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Partial<DishItem>>({});
+  // 食塩量計算式の詳細展開状態（false/未設定: 最小限表示、true: 全表示）
+  const [expandedSaltIds, setExpandedSaltIds] = useState<Record<string, boolean>>({});
 
   const totals = calculateMealTotals(meal);
+
+  // 食塩計算式が複数行や詳細式を持っているか判定
+  const hasDetailedSaltFormula = (saltGrams?: string) => {
+    if (!saltGrams) return false;
+    const trimmed = saltGrams.trim();
+    return trimmed.includes('\n') || trimmed.includes('=') || trimmed.length > 12;
+  };
+
+  // 最小限表示（使用食材・調味料の行幅に合わせて可能な範囲で表示）
+  const formatCompactSalt = (dish: DishItem) => {
+    const text = (dish.saltGrams ?? '').trim();
+    if (!text || text === '-') {
+      return dish.saltTotal > 0 ? `${dish.saltTotal.toFixed(2)}g` : '-';
+    }
+
+    const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
+
+    // 1行だけで短い場合はそのまま表示
+    if (lines.length <= 1 && text.length <= 12) {
+      return text;
+    }
+
+    // 複数行の場合: 使用食材・調味料の行幅に合わせて2行程度に収める
+    if (lines.length > 1) {
+      const firstLine = lines[0];
+      const lastLine = lines[lines.length - 1];
+
+      let lastSummary = lastLine;
+      if (lastLine.includes('=')) {
+        const eqParts = lastLine.split('=');
+        lastSummary = '=' + eqParts[eqParts.length - 1].trim();
+      }
+      return `${firstLine}\n${lastSummary}`;
+    }
+
+    // 1行で = 等を含む長い式の場合、合計部分をすっきり表示
+    if (text.includes('=')) {
+      const eqParts = text.split('=');
+      return '=' + eqParts[eqParts.length - 1].trim();
+    }
+
+    if (dish.saltTotal > 0) {
+      return `${dish.saltTotal.toFixed(2)}g`;
+    }
+
+    return text;
+  };
+
+  const toggleSaltExpand = (dishId: string) => {
+    setExpandedSaltIds((prev) => ({
+      ...prev,
+      [dishId]: !prev[dishId]
+    }));
+  };
+
+  // 全料理の食塩詳細の一括トグル
+  const isAllSaltExpanded =
+    meal.items.length > 0 && meal.items.every((item) => !!expandedSaltIds[item.id]);
+
+  const toggleAllSaltExpand = () => {
+    if (isAllSaltExpanded) {
+      setExpandedSaltIds({});
+    } else {
+      const nextState: Record<string, boolean> = {};
+      meal.items.forEach((item) => {
+        nextState[item.id] = true;
+      });
+      setExpandedSaltIds(nextState);
+    }
+  };
 
   const handleStartEdit = (dish: DishItem) => {
     setEditingId(dish.id);
@@ -256,8 +328,18 @@ export const MenuMatrixTable: React.FC<Props> = ({
               <th className={`${headerPadding} w-20 text-center border-r border-emerald-900/60 print:border-black font-semibold text-[11px]`}>
                 使用量(g)
               </th>
-              <th className={`${headerPadding} w-20 text-center border-r border-emerald-900/60 print:border-black font-semibold text-[11px]`}>
-                食塩量(g)
+              <th className={`${headerPadding} w-24 text-center border-r border-emerald-900/60 print:border-black font-semibold text-[11px]`}>
+                <div className="flex items-center justify-center gap-1">
+                  <span>食塩量(g)</span>
+                  <button
+                    type="button"
+                    onClick={toggleAllSaltExpand}
+                    className="p-0.5 rounded hover:bg-emerald-800/80 text-emerald-200 hover:text-white transition-colors print:hidden"
+                    title={isAllSaltExpanded ? "全行の食塩計算式を最小限に折りたたむ（↑）" : "全行の食塩計算式を全表示する（↓）"}
+                  >
+                    {isAllSaltExpanded ? <ArrowUp className="w-2.5 h-2.5" /> : <ArrowDown className="w-2.5 h-2.5" />}
+                  </button>
+                </div>
               </th>
               <th className={`${headerPadding} w-16 text-center print:hidden font-semibold text-[11px]`}>
                 操作
@@ -403,7 +485,7 @@ export const MenuMatrixTable: React.FC<Props> = ({
                   </td>
 
                   {/* 食塩量(g) */}
-                  <td className={`${cellPadding} text-stone-800 border-r border-stone-200 print:border-black align-top text-center whitespace-pre-line font-mono font-medium text-xs`}>
+                  <td className={`${cellPadding} text-stone-800 border-r border-stone-200 print:border-black align-top text-center font-mono font-medium text-xs`}>
                     {isEditing ? (
                       <textarea
                         rows={2}
@@ -421,12 +503,57 @@ export const MenuMatrixTable: React.FC<Props> = ({
                         placeholder="0.60 / 0.16"
                       />
                     ) : (
-                      <div
-                        onClick={() => handleStartEdit(dish)}
-                        className="cursor-pointer hover:bg-stone-100/60 p-0.5 rounded text-stone-900 font-bold"
-                        title="クリックして直接手入力・編集"
-                      >
-                        {dish.saltGrams || <span className="text-stone-300">-</span>}
+                      <div className="flex flex-col items-center justify-start">
+                        {expandedSaltIds[dish.id] ? (
+                          // 詳細全表示モード（「↓」が押されたとき）
+                          <div className="w-full flex flex-col items-center">
+                            <div className="w-full flex items-center justify-between gap-1 mb-0.5 print:hidden">
+                              <span className="text-[9px] text-stone-400 font-sans">全表示</span>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  toggleSaltExpand(dish.id);
+                                }}
+                                className="p-0.5 text-stone-500 hover:text-stone-800 hover:bg-stone-200/70 rounded transition-colors"
+                                title="最小限の表示に折りたたむ（↑）"
+                              >
+                                <ArrowUp className="w-2.5 h-2.5" />
+                              </button>
+                            </div>
+                            <div
+                              onClick={() => handleStartEdit(dish)}
+                              className="cursor-pointer hover:bg-stone-100/60 p-0.5 rounded text-stone-900 font-bold whitespace-pre-line text-center text-xs leading-tight w-full"
+                              title="クリックして直接手入力・編集"
+                            >
+                              {dish.saltGrams || <span className="text-stone-300">-</span>}
+                            </div>
+                          </div>
+                        ) : (
+                          // 最小限表示モード（「↑」または初期状態：使用食材・調味料行幅に合わせてコンパクトに表示）
+                          <div className="w-full flex items-center justify-center gap-1">
+                            <div
+                              onClick={() => handleStartEdit(dish)}
+                              className="cursor-pointer hover:bg-stone-100/60 p-0.5 rounded text-stone-900 font-bold whitespace-pre-line text-center text-xs leading-tight"
+                              title="クリックして直接手入力・編集"
+                            >
+                              {formatCompactSalt(dish)}
+                            </div>
+                            {hasDetailedSaltFormula(dish.saltGrams) && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  toggleSaltExpand(dish.id);
+                                }}
+                                className="p-0.5 text-stone-400 hover:text-stone-700 hover:bg-stone-200/70 rounded transition-colors print:hidden"
+                                title="計算式の詳細を全表示する（↓）"
+                              >
+                                <ArrowDown className="w-2.5 h-2.5" />
+                              </button>
+                            )}
+                          </div>
+                        )}
                       </div>
                     )}
                   </td>
