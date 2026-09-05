@@ -306,11 +306,17 @@ export default function App() {
       };
     });
 
-    // Update saved records (replace existing matching dates or prepend)
+    // Update saved records (replace existing matching dates and automatically sort by ascending date)
     setSavedRecords((prev) => {
       const keysToAdd = new Set(newRecords.map((r) => `${r.year}-${r.month}-${r.day}`));
       const remaining = prev.filter((r) => !keysToAdd.has(`${r.year}-${r.month}-${r.day}`));
-      return [...newRecords, ...remaining];
+      const combined = [...remaining, ...newRecords];
+      combined.sort((a, b) => {
+        const dateValA = a.year * 10000 + a.month * 100 + a.day;
+        const dateValB = b.year * 10000 + b.month * 100 + b.day;
+        return dateValA - dateValB;
+      });
+      return combined;
     });
 
     // Advance sheet days to the next upcoming days

@@ -19,10 +19,20 @@ export const SavedListPrintModal: React.FC<Props> = ({
   const [orientation, setOrientation] = useState<'portrait' | 'landscape'>('portrait');
 
   const targetRecords = useMemo(() => {
+    // 若い日（1日〜）から順に自動ソート
+    const sorted = [...records].sort((a, b) => {
+      const dateValA = a.year * 10000 + a.month * 100 + a.day;
+      const dateValB = b.year * 10000 + b.month * 100 + b.day;
+      if (dateValA !== dateValB) {
+        return dateValA - dateValB;
+      }
+      return (a.savedAt || '').localeCompare(b.savedAt || '');
+    });
+
     if (printScope === 'recent10') {
-      return records.slice(0, 10);
+      return sorted.slice(0, 10);
     }
-    return records;
+    return sorted;
   }, [records, printScope]);
 
   if (!isOpen) return null;

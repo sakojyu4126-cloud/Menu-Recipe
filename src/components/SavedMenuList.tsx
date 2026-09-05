@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Search, Calendar, Edit3, Trash2, CheckCircle2, AlertTriangle, ArrowRight, Printer } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { Search, Calendar, Edit3, Trash2, CheckCircle2, AlertTriangle, ArrowRight, Printer, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { SavedMenuRecord } from '../types';
 
 interface Props {
@@ -22,29 +22,47 @@ export const SavedMenuList: React.FC<Props> = ({
   const [searchDay, setSearchDay] = useState<string>('');
   const [keyword, setKeyword] = useState<string>('');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  // デフォルト: 'asc'（若い日：7/1なら1日から順に自動ソート）
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
 
-  const filteredRecords = savedRecords.filter((record) => {
-    if (searchYear && record.year.toString() !== searchYear) return false;
-    if (searchMonth && record.month.toString() !== searchMonth) return false;
-    if (searchDay && record.day.toString() !== searchDay) return false;
+  const filteredRecords = useMemo(() => {
+    const list = savedRecords.filter((record) => {
+      if (searchYear && record.year.toString() !== searchYear) return false;
+      if (searchMonth && record.month.toString() !== searchMonth) return false;
+      if (searchDay && record.day.toString() !== searchDay) return false;
 
-    if (keyword.trim()) {
-      const q = keyword.trim().toLowerCase();
-      const allDishes = [
-        ...record.meals.breakfast.items.map((i) => i.dishName),
-        ...record.meals.lunch.items.map((i) => i.dishName),
-        ...record.meals.dinner.items.map((i) => i.dishName)
-      ]
-        .join(' ')
-        .toLowerCase();
+      if (keyword.trim()) {
+        const q = keyword.trim().toLowerCase();
+        const allDishes = [
+          ...record.meals.breakfast.items.map((i) => i.dishName),
+          ...record.meals.lunch.items.map((i) => i.dishName),
+          ...record.meals.dinner.items.map((i) => i.dishName)
+        ]
+          .join(' ')
+          .toLowerCase();
 
-      if (!allDishes.includes(q) && !record.dateDisplay.toLowerCase().includes(q)) {
-        return false;
+        if (!allDishes.includes(q) && !record.dateDisplay.toLowerCase().includes(q)) {
+          return false;
+        }
       }
-    }
 
-    return true;
-  });
+      return true;
+    });
+
+    // 若い日（1日、2日、3日...）から自動で並ぶようソート
+    list.sort((a, b) => {
+      const dateValA = a.year * 10000 + a.month * 100 + a.day;
+      const dateValB = b.year * 10000 + b.month * 100 + b.day;
+      if (dateValA !== dateValB) {
+        return sortOrder === 'asc' ? dateValA - dateValB : dateValB - dateValA;
+      }
+      return sortOrder === 'asc'
+        ? (a.savedAt || '').localeCompare(b.savedAt || '')
+        : (b.savedAt || '').localeCompare(a.savedAt || '');
+    });
+
+    return list;
+  }, [savedRecords, searchYear, searchMonth, searchDay, keyword, sortOrder]);
 
   const handleToggleSelect = (id: string) => {
     setSelectedIds((prev) =>
@@ -247,7 +265,29 @@ export const SavedMenuList: React.FC<Props> = ({
               <thead>
                 <tr className="bg-stone-50 text-stone-700 font-bold border-b border-stone-300">
                   <th className="py-2 px-2.5 w-10 text-center">選択</th>
-                  <th className="py-2 px-2.5 w-32">献立日付</th>
+                  <th className="py-2 px-2.5 w-36">
+                    <button
+                      type="button"
+                      onClick={() => setSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'))}
+                      className="flex items-center gap-1 font-bold text-stone-800 hover:text-emerald-800 transition-colors cursor-pointer group"
+                      title={sortOrder === 'asc' ? '現在は若い日順（1日〜）です。クリックで新しい順に切替' : '現在は新しい日順です。クリックで若い日順（1日〜）に切替'}
+                    >
+                      <span>献立日付</span>
+                      <span className="inline-flex items-center text-[10px] px-1 py-0.5 rounded bg-stone-200 group-hover:bg-emerald-100 text-stone-700 group-hover:text-emerald-900 font-normal">
+                        {sortOrder === 'asc' ? (
+                          <>
+                            <span>若い日順</span>
+                            <ArrowUp className="w-2.5 h-2.5 ml-0.5" />
+                          </>
+                        ) : (
+                          <>
+                            <span>新しい順</span>
+                            <ArrowDown className="w-2.5 h-2.5 ml-0.5" />
+                          </>
+                        )}
+                      </span>
+                    </button>
+                  </th>
                   <th className="py-2 px-2.5 w-[360px] sm:w-[420px]">献立内容（朝・昼・夕の主菜・副菜）</th>
                   <th className="py-2 px-2.5 w-28 text-center">1日食塩量</th>
                   <th className="py-2 px-2.5 w-24 text-center">エネルギー</th>
